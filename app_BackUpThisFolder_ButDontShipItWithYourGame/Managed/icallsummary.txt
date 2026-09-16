@@ -1112,7 +1112,6 @@ UnityEngine.ObjectDispatcher::EnableTypeTracking
 UnityEngine.ObjectGUIState::Internal_Create
 UnityEngine.ObjectGUIState::Internal_Destroy
 UnityEngine.ParticleSystem::Emit_Internal_Injected
-UnityEngine.ParticleSystem::Play_Injected
 UnityEngine.ParticleSystem::SetParticles_Injected
 UnityEngine.ParticleSystem/MainModule::get_startColorBlittable_Injected
 UnityEngine.ParticleSystem/MainModule::get_startSizeBlittable_Injected
@@ -1598,10 +1597,12 @@ UnityEngine.Rigidbody::get_position_Injected
 UnityEngine.Rigidbody::get_rotation_Injected
 UnityEngine.Rigidbody::set_angularDamping_Injected
 UnityEngine.Rigidbody::set_angularVelocity_Injected
+UnityEngine.Rigidbody::set_collisionDetectionMode_Injected
 UnityEngine.Rigidbody::set_interpolation_Injected
 UnityEngine.Rigidbody::set_isKinematic_Injected
 UnityEngine.Rigidbody::set_linearDamping_Injected
 UnityEngine.Rigidbody::set_linearVelocity_Injected
+UnityEngine.Rigidbody::set_mass_Injected
 UnityEngine.Rigidbody::set_useGravity_Injected
 UnityEngine.Rigidbody::get_interpolation_Injected
 UnityEngine.ScalableBufferManager::get_heightScaleFactor
@@ -2006,6 +2007,7 @@ UnityEngine.Transform::SetAsFirstSibling_Injected
 UnityEngine.Transform::SetLocalPositionAndRotation_Injected
 UnityEngine.Transform::SetParent_Injected
 UnityEngine.Transform::SetPositionAndRotation_Injected
+UnityEngine.Transform::SetSiblingIndex_Injected
 UnityEngine.Transform::TransformDirection_Injected
 UnityEngine.Transform::TransformPoint_Injected
 UnityEngine.Transform::TransformVector_Injected

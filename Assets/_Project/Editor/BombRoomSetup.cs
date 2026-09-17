@@ -575,7 +575,7 @@ public static class BombRoomSetup
 
         // Fondo de la cara izquierda (sin collider), con marco alrededor.
         float panelW = spacing * size + 0.02f;
-        float panelH = 0.52f; // algo más alto para dejar hueco al botón START
+        float panelH = 0.56f; // algo más alto para dejar hueco al botón START
         Cube(module.transform, "SimonPanel", new Vector3(SimonModule.Layout.PanelX, 0f, 0f),
             new Vector3(0.014f, panelH, panelW), panelMat);
 
@@ -607,10 +607,12 @@ public static class BombRoomSetup
         startBtn.name = "SimonStartButton";
         startBtn.transform.SetParent(module.transform, false);
         startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.225f, 0f);
-        startBtn.transform.localScale = new Vector3(0.06f, 0.09f, 0.18f);
+        startBtn.transform.localScale = new Vector3(0.08f, 0.12f, 0.22f);
         startBtn.GetComponent<Renderer>().sharedMaterial =
             GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.2f);
-        startBtn.AddComponent<XRSimpleInteractable>();
+
+        XRSimpleInteractable startInteractable = startBtn.AddComponent<XRSimpleInteractable>();
+        startInteractable.selectMode = InteractableSelectMode.Single;
 
         // Etiqueta "START" (canvas world-space pequeño orientado hacia -X).
         GameObject labelGo = new GameObject("SimonStartLabel");
@@ -643,14 +645,14 @@ public static class BombRoomSetup
         canvasGo.transform.SetParent(hud.transform, false);
         canvasGo.transform.localPosition = new Vector3(0f, 0f, 0f);
         canvasGo.transform.localRotation = Quaternion.identity;
-        canvasGo.transform.localScale = new Vector3(0.0018f, 0.0018f, 0.0018f);
+        canvasGo.transform.localScale = new Vector3(0.0025f, 0.0025f, 0.0025f);
 
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
 
-        hud.timeText = CreateText(canvasGo.transform, "TimeText", new Vector2(0, 14), new Vector2(180, 62), 84, new Color(0.35f, 1f, 0.4f));
-        hud.statusText = CreateText(canvasGo.transform, "StatusText", new Vector2(0, -28), new Vector2(220, 42), 30, Color.white);
-        hud.feedbackText = CreateText(canvasGo.transform, "FeedbackText", new Vector2(0, -64), new Vector2(240, 36), 24, Color.white);
+        hud.timeText = CreateText(canvasGo.transform, "TimeText", new Vector2(0, 14), new Vector2(180, 62), 90, new Color(0.35f, 1f, 0.4f));
+        hud.statusText = CreateText(canvasGo.transform, "StatusText", new Vector2(0, -28), new Vector2(260, 50), 36, Color.white);
+        hud.feedbackText = CreateText(canvasGo.transform, "FeedbackText", new Vector2(0, -68), new Vector2(280, 44), 30, Color.white);
     }
 
     private static void BuildResetButton(GameObject root, float tableTop)

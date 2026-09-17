@@ -26,7 +26,7 @@ public class SimonModule : ModuleBase
         public const float PanelX = -0.452f;
         public const int GridSize = 3;        // rejilla 3x3
         public const float Spacing = 0.12f;   // separación entre centros
-        public const float ButtonSize = 0.11f;
+        public const float ButtonSize = 0.13f;
     }
 
     /// <summary>

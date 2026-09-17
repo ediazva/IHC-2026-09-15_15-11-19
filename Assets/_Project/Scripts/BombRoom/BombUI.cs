@@ -206,14 +206,14 @@ public class BombUI : MonoBehaviour
             case BombState.Finalizado:
                 statusText.text = "¡PULSA EL BOTÓN ROJO!";
                 statusText.color = new Color(1f, 0.55f, 0.2f);
-                ShowFeedback("LISTO ✓", new Color(1f, 0.75f, 0.2f));
+                ShowFeedback("LISTO [OK]", new Color(1f, 0.75f, 0.2f));
                 SFX.Play(SfxType.Solved, 0.9f);
                 break;
 
             case BombState.Defused:
                 statusText.text = "BOMBA DESARMADA ✓";
                 statusText.color = new Color(0.35f, 1f, 0.4f);
-                ShowFeedback("¡DESARMADA! +++++", new Color(0.35f, 1f, 0.4f));
+                ShowFeedback("DESARMADA!", new Color(0.35f, 1f, 0.4f));
                 SFX.Play(SfxType.Solved, 0.9f);
                 break;
 
@@ -278,13 +278,13 @@ public class BombUI : MonoBehaviour
 
     private void OnCableConnected(Color color)
     {
-        ShowFeedback($"CONECTADO {BombRoomPalette.NameOf(color)} ✓", new Color(0.35f, 1f, 0.4f));
+        ShowFeedback($"CONECTADO {BombRoomPalette.NameOf(color)} [OK]", new Color(0.35f, 1f, 0.4f));
         RefreshStatus();
     }
 
     private void OnCableWrong()
     {
-        ShowFeedback("¡CABLE EQUIVOCADO! ⚡", new Color(1f, 0.45f, 0.2f));
+        ShowFeedback("CABLE EQUIVOCADO [!]", new Color(1f, 0.45f, 0.2f));
         RefreshStatus();
     }
 
@@ -292,19 +292,19 @@ public class BombUI : MonoBehaviour
 
     private void OnSimonWrong()
     {
-        ShowFeedback("¡SECUENCIA MAL! ✗", new Color(1f, 0.45f, 0.2f));
+        ShowFeedback("SECUENCIA MAL [X]", new Color(1f, 0.45f, 0.2f));
         RefreshStatus();
     }
 
     private void OnRoundComplete(int round, int total)
     {
-        ShowFeedback($"¡RONDA {round}/{total} OK! ✓", new Color(0.35f, 1f, 0.4f));
+        ShowFeedback($"RONDA {round}/{total} OK!", new Color(0.35f, 1f, 0.4f));
         RefreshStatus();
     }
 
     private void OnSimonComplete()
     {
-        ShowFeedback("¡SIMÓN OK! ✓", new Color(0.35f, 1f, 0.4f));
+        ShowFeedback("SIMON OK!", new Color(0.35f, 1f, 0.4f));
         RefreshStatus();
     }
 

@@ -29,8 +29,8 @@ public class CablesModule : ModuleBase
         public const float PlaneZ = 0.315f;  // cara frontal del cubo (+Z)
         public const float Row0Y = 0.10f;
         public const float RowSpacing = 0.15f;
-        public const float PlugRadius = 0.035f;
-        public const float SocketSize = 0.085f;
+        public const float PlugRadius = 0.045f;
+        public const float SocketSize = 0.095f;
         public const float CordRadius = 0.013f;
         public const float SnapDistance = 0.14f;
     }

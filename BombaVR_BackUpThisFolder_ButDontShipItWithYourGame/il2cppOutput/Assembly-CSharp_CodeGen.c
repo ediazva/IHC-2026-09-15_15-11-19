@@ -415,7 +415,11 @@ extern void VRPhysicsInteractable_Update_m66837C75AB2CA289F2078CB938EA7B377A836A
 extern void VRPhysicsInteractable_ResetToSpawn_mB35C435ADAC4EC2AD56BEFB908C1C6616FB77485 (void);
 extern void VRPhysicsInteractable_OnValidate_m0C47FE32B1830AF6E655026108804F1374456AE3 (void);
 extern void VRPhysicsInteractable__ctor_m4544BA23B60DD63EFB7F606D4041BE862CCE7D38 (void);
-static Il2CppMethodPointer s_methodPointers[408] = 
+extern void XRSimulatorAutoDisable_Awake_mFCA1E9847992324AE1C74B54E2E409AC84CAD6B8 (void);
+extern void XRSimulatorAutoDisable_CleanupAndDestroy_m4BA8094CA7F70C3209E0477A0B5CC0E8BF031559 (void);
+extern void XRSimulatorAutoDisable_HasRealHmd_m27668EDDA3D305CFCBE80C43D43638B262DA3B04 (void);
+extern void XRSimulatorAutoDisable__ctor_m1FFA7FB883A0EB84FE6F99EC162BFB6EBBBF7876 (void);
+static Il2CppMethodPointer s_methodPointers[412] = 
 {
 	HeartRateReceiver_get_CurrentBpm_mD0236414D0B6F5DE6CE85795EA77F364556B60D2,
 	HeartRateReceiver_set_CurrentBpm_m58A027FF6DF8C3352A66EDA70B631185AAD028A8,
@@ -825,12 +829,16 @@ static Il2CppMethodPointer s_methodPointers[408] =
 	VRPhysicsInteractable_ResetToSpawn_mB35C435ADAC4EC2AD56BEFB908C1C6616FB77485,
 	VRPhysicsInteractable_OnValidate_m0C47FE32B1830AF6E655026108804F1374456AE3,
 	VRPhysicsInteractable__ctor_m4544BA23B60DD63EFB7F606D4041BE862CCE7D38,
+	XRSimulatorAutoDisable_Awake_mFCA1E9847992324AE1C74B54E2E409AC84CAD6B8,
+	XRSimulatorAutoDisable_CleanupAndDestroy_m4BA8094CA7F70C3209E0477A0B5CC0E8BF031559,
+	XRSimulatorAutoDisable_HasRealHmd_m27668EDDA3D305CFCBE80C43D43638B262DA3B04,
+	XRSimulatorAutoDisable__ctor_m1FFA7FB883A0EB84FE6F99EC162BFB6EBBBF7876,
 };
 IL2CPP_EXTERN_C const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule;
 const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule = 
 {
 	"Assembly-CSharp.dll",
-	408,
+	412,
 	s_methodPointers,
 	0,
 	NULL,

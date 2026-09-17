@@ -29,8 +29,14 @@ public static class BombRoomSetup
     private const string ScenePath = "Assets/_Project/Scenes/BombRoom.unity";
     private const string MaterialFolder = "Assets/_Project/Materials/BombRoom";
 
-    [MenuItem("Bomba VR/Crear escena BombRoom (Editor)")]
+    [MenuItem("Bomba VR/Crear escena BombRoom (para Cascos VR / OpenXR)", false, 1)]
     public static void CreateBombRoom()
+    {
+        CreateBombRoomScene(addXriSimulator: false, path: ScenePath);
+    }
+
+    [MenuItem("Bomba VR/Crear escena BombRoom (con Simulador XRI teclado+ratón)", false, 2)]
+    public static void CreateBombRoomWithSimulator()
     {
         CreateBombRoomScene(addXriSimulator: true, path: ScenePath);
     }
@@ -47,7 +53,7 @@ public static class BombRoomSetup
         Debug.Log($"<color=#7CFC00>[Bomba VR] Escena abierta: {ScenePath}. En la ventana Hierarchy verás BombRoom con la mesa y la bomba.</color>");
     }
 
-    [MenuItem("Bomba VR/Crear escena BombRoom (para Meta XR Simulator)")]
+    [MenuItem("Bomba VR/Crear escena BombRoom (para Meta XR Simulator)", false, 3)]
     public static void CreateBombRoomForMetaSimulator()
     {
         // Con el simulador de Meta el rig XR debe recibir el HMD+mandos/manos de
@@ -62,19 +68,39 @@ public static class BombRoomSetup
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
         EnsureEventSystem();
-        InstantiatePrefab(RigPath);
+        GameObject rig = InstantiatePrefab(RigPath);
+        if (rig != null)
+        {
+            rig.transform.position = new Vector3(0f, 0f, 0.85f);
+            rig.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+        }
+
         if (addXriSimulator)
         {
-            InstantiatePrefab(SimulatorPath);
-            InstantiatePrefab(SimulatorUiPath);
+            GameObject sim = InstantiatePrefab(SimulatorPath);
+            GameObject simUi = InstantiatePrefab(SimulatorUiPath);
+            if (sim != null)
+            {
+                var autoDisable = sim.AddComponent<XRSimulatorAutoDisable>();
+                if (simUi != null)
+                {
+                    var so = new SerializedObject(autoDisable);
+                    var uiProp = so.FindProperty("simulatorUi");
+                    if (uiProp != null)
+                    {
+                        uiProp.objectReferenceValue = simUi;
+                        so.ApplyModifiedProperties();
+                    }
+                }
+            }
         }
 
         BuildRoomInScene();
 
         EditorSceneManager.SaveScene(scene, path);
         Debug.Log(addXriSimulator
-            ? $"<color=#7CFC00>[Bomba VR] Escena guardada en {path}. Pulsa Play y usa el simulador de XRI (WASD + ratón).</color>"
-            : $"<color=#7CFC00>[Bomba VR] Escena guardada en {path} SIN simulador de XRI. Antes de pulsar Play: menú Meta → Meta XR Simulator → Activate.</color>");
+            ? $"<color=#7CFC00>[Bomba VR] Escena guardada en {path}. Incluye simulador de XRI protegido con auto-desactivación para visores.</color>"
+            : $"<color=#7CFC00>[Bomba VR] Escena guardada en {path} lista para cascos VR / OpenXR / Meta Simulator.</color>");
     }
 
     [MenuItem("Bomba VR/Construir sala en la escena actual")]
@@ -202,9 +228,23 @@ public static class BombRoomSetup
     public static void AddSimulatorToCurrentScene()
     {
         EnsureEventSystem();
-        InstantiatePrefab(SimulatorPath);
-        InstantiatePrefab(SimulatorUiPath);
-        Debug.Log("<color=#7CFC00>[Bomba VR] Simulador agregado. Revisa que exista un XR Origin con interactores.</color>");
+        GameObject sim = InstantiatePrefab(SimulatorPath);
+        GameObject simUi = InstantiatePrefab(SimulatorUiPath);
+        if (sim != null)
+        {
+            var autoDisable = sim.AddComponent<XRSimulatorAutoDisable>();
+            if (simUi != null)
+            {
+                var so = new SerializedObject(autoDisable);
+                var uiProp = so.FindProperty("simulatorUi");
+                if (uiProp != null)
+                {
+                    uiProp.objectReferenceValue = simUi;
+                    so.ApplyModifiedProperties();
+                }
+            }
+        }
+        Debug.Log("<color=#7CFC00>[Bomba VR] Simulador agregado con protección para cascos VR. Revisa que exista un XR Origin con interactores.</color>");
     }
 
     [MenuItem("Bomba VR/Quitar simulador XRI de la escena actual (usar Meta XR Simulator)")]
@@ -797,15 +837,15 @@ public static class BombRoomSetup
         es.AddComponent<XRUIInputModule>();
     }
 
-    private static void InstantiatePrefab(string path)
+    private static GameObject InstantiatePrefab(string path)
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
         if (prefab == null)
         {
             Debug.LogWarning($"[Bomba VR] No se encontró el prefab: {path}");
-            return;
+            return null;
         }
-        PrefabUtility.InstantiatePrefab(prefab);
+        return (GameObject)PrefabUtility.InstantiatePrefab(prefab);
     }
 
     private static void EnsureSceneFolder()

@@ -325,7 +325,12 @@ public class SimonModule : ModuleBase
 
             bool lit = button.litUntil > Time.time;
             button.material.EnableKeyword("_EMISSION");
-            button.material.SetColor("_EmissionColor", button.color * (lit ? 2.6f : 0.18f));
+            button.material.SetColor("_EmissionColor", button.color * (lit ? 4.0f : 0f));
+
+            Color baseColor = button.color * (lit ? 1.6f : 0.55f);
+            button.material.SetColor("_BaseColor", baseColor);
+            if (button.material.HasProperty("_Color"))
+                button.material.SetColor("_Color", baseColor);
         }
     }
 }

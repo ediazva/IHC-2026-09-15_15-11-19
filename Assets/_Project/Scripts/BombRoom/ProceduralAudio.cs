@@ -28,6 +28,14 @@ public static class SFX
         if (clip != null) source.PlayOneShot(clip, volume);
     }
 
+    /// <summary>Nota suave con decaimiento (interfaces tipo "Simón", menús...).</summary>
+    public static void Tone(float frequency, float duration = 0.3f, float volume = 0.55f, float decay = 5f)
+    {
+        EnsureSource();
+        AudioClip clip = Sine(frequency, duration, decay);
+        if (clip != null) source.PlayOneShot(clip, volume);
+    }
+
     private static void EnsureSource()
     {
         if (source != null && source.gameObject != null) return;

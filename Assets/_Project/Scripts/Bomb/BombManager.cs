@@ -94,11 +94,14 @@ public class BombManager : MonoBehaviour
         strikes?.AddStrike();
         timer?.ApplyPenalty(penaltyPerStrike);
 
+        Debug.Log($"[Bomba VR] STRIKE {strikes?.Strikes}/{strikes?.MaxStrikes} por módulo '{m.Title}'", m);
+
         // Si el tercer strike estalló la bomba, OnExploded ya cambió el estado.
     }
 
     private void HandleTimeout()
     {
+        Debug.Log("[Bomba VR] TIMEOUT: se agotó el tiempo.");
         Explode();
     }
 

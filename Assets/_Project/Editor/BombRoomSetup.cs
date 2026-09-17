@@ -35,6 +35,18 @@ public static class BombRoomSetup
         CreateBombRoomScene(addXriSimulator: true, path: ScenePath);
     }
 
+    [MenuItem("Bomba VR/Abrir escena BombRoom", false, 0)]
+    public static void OpenBombRoomScene()
+    {
+        if (!File.Exists(Path.Combine(Application.dataPath, "_Project", "Scenes", "BombRoom.unity")))
+        {
+            Debug.LogWarning($"[Bomba VR] No existe {ScenePath}. Crea la escena primero.");
+            return;
+        }
+        EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        Debug.Log($"<color=#7CFC00>[Bomba VR] Escena abierta: {ScenePath}. En la ventana Hierarchy verás BombRoom con la mesa y la bomba.</color>");
+    }
+
     [MenuItem("Bomba VR/Crear escena BombRoom (para Meta XR Simulator)")]
     public static void CreateBombRoomForMetaSimulator()
     {
@@ -87,6 +99,103 @@ public static class BombRoomSetup
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("<color=#7CFC00>[Bomba VR] Sala construida en el editor. Revisa en la ventana Scene: mesa, bomba, cables, alicates, HUD y botón R. Pulsa Play para jugar.</color>");
+    }
+
+    [MenuItem("Bomba VR/Añadir módulo Simón a la bomba actual", false, 100)]
+    public static void AddSimonToCurrentBomb()
+    {
+        BombManager bomb = Object.FindAnyObjectByType<BombManager>();
+        if (bomb == null)
+        {
+            Debug.LogError("[Bomba VR] No hay ninguna bomba (BombManager) en la escena. Crea la sala primero.");
+            return;
+        }
+
+        // Si ya existe, lo reemplaza (permite actualizar el diseño 3x3 sin duplicar).
+        SimonModule existing = bomb.GetComponentInChildren<SimonModule>(true);
+        if (existing != null)
+        {
+            Object.DestroyImmediate(existing.gameObject);
+        }
+
+        Material panel = GetMaterial("Mat_Panel", new Color(0.05f, 0.055f, 0.06f));
+
+        Material[] simonMats = new Material[SimonModule.ButtonColors.Length];
+        for (int i = 0; i < simonMats.Length; i++)
+            simonMats[i] = GetMaterial($"Mat_Simon_{i}", SimonModule.ButtonColors[i], emission: 0.3f);
+
+        GameObject simonGo = new GameObject("Module_Simon");
+        simonGo.transform.SetParent(bomb.transform, false);
+        SimonModule simon = simonGo.AddComponent<SimonModule>();
+        BuildSimon(simon, simonMats, panel);
+
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        Debug.Log("<color=#7CFC00>[Bomba VR] Módulo Simón añadido a la cara izquierda. Guarda la escena (Cmd+S).</color>");
+    }
+
+    [MenuItem("Bomba VR/Reparar colliders de la bomba (quitar avisos)", false, 101)]
+    public static void RepairBombColliders()
+    {
+        BombManager bomb = Object.FindAnyObjectByType<BombManager>();
+        if (bomb == null)
+        {
+            Debug.LogError("[Bomba VR] No hay ninguna bomba (BombManager) en la escena.");
+            return;
+        }
+
+        XRGrabInteractable grab = bomb.GetComponent<XRGrabInteractable>();
+        if (grab == null)
+        {
+            Debug.LogWarning("[Bomba VR] La bomba no tiene XRGrabInteractable.");
+            return;
+        }
+
+        Transform body = bomb.transform.Find("Body");
+        Collider bodyCollider = body != null ? body.GetComponent<Collider>() : null;
+        if (bodyCollider == null)
+        {
+            Debug.LogError("[Bomba VR] No se encontró el collider del cuerpo (hijo 'Body').");
+            return;
+        }
+
+        grab.colliders.Clear();
+        grab.colliders.Add(bodyCollider);
+        EditorUtility.SetDirty(grab);
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        Debug.Log("<color=#7CFC00>[Bomba VR] Colliders del grab reparados: solo el cuerpo. Guarda la escena (Cmd+S).</color>");
+    }
+
+    [MenuItem("Bomba VR/Enfocar la vista Scene en la sala", false, 0)]
+    public static void FocusSceneViewOnRoom()
+    {
+        GameObject root = null;
+        foreach (GameObject go in SceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            if (go != null && go.name == "BombRoom") root = go;
+        }
+
+        SceneView view = SceneView.lastActiveSceneView;
+        if (view == null)
+        {
+            Debug.LogWarning("[Bomba VR] Abre una ventana Scene y vuelve a intentarlo.");
+            return;
+        }
+
+        if (root == null)
+        {
+            Debug.LogWarning("[Bomba VR] No hay un objeto 'BombRoom' en la escena activa. ¿Abriste BombRoom.unity?");
+            view.FrameSelected();
+            return;
+        }
+
+        Bounds bounds = new Bounds(root.transform.position, Vector3.one * 0.5f);
+        foreach (Renderer r in root.GetComponentsInChildren<Renderer>())
+        {
+            if (r != null) bounds.Encapsulate(r.bounds);
+        }
+        view.Frame(bounds, false);
+        view.Repaint();
+        Debug.Log("<color=#7CFC00>[Bomba VR] Vista Scene enfocada en la sala.</color>");
     }
 
     [MenuItem("Bomba VR/Agregar simulador XR a la escena actual")]
@@ -200,6 +309,10 @@ public static class BombRoomSetup
             cordMats[i] = GetMaterial($"Mat_Cord_{i}", CablesModule.PuzzleColors[i], emission: 1.2f);
         }
 
+        Material[] simonMats = new Material[SimonModule.ButtonColors.Length];
+        for (int i = 0; i < simonMats.Length; i++)
+            simonMats[i] = GetMaterial($"Mat_Simon_{i}", SimonModule.ButtonColors[i], emission: 0.3f);
+
         // --- Cuerpo de la bomba: raíz sin escala (1:1) + hijo visual del cubo.
         // La raíz en escala 1 permite colocar los módulos/HUD en las caras
         // con coordenadas en metros, sin deformar textos ni esferas.
@@ -238,6 +351,14 @@ public static class BombRoomSetup
         grab.throwOnDetach = false;
         grab.movementType = XRBaseInteractable.MovementType.Instantaneous;
 
+        // IMPORTANTE: si no se asignan, XRGrabInteractable usa TODOS los colliders
+        // hijos (botones, tomas, conectores...) y choca con sus interactables.
+        // Se limita al collider del cuerpo para poder agarrar la bomba sin robar
+        // la interacción a los módulos.
+        grab.colliders.Clear();
+        Collider bodyCollider = bodyCube.GetComponent<Collider>();
+        if (bodyCollider != null) grab.colliders.Add(bodyCollider);
+
         // --- LEDs de strike (filo superior frontal)
         Renderer[] leds = new Renderer[strikes.MaxStrikes];
         for (int i = 0; i < leds.Length; i++)
@@ -254,6 +375,12 @@ public static class BombRoomSetup
         CablesModule module = moduleGo.AddComponent<CablesModule>();
 
         BuildCables(module, cableMats, cordMats);
+
+        // --- Módulo Simón (cara izquierda del cubo).
+        GameObject simonGo = new GameObject("Module_Simon");
+        simonGo.transform.SetParent(bomb.transform, false);
+        SimonModule simon = simonGo.AddComponent<SimonModule>();
+        BuildSimon(simon, simonMats, panel);
 
         // --- HUD: contador pequeño en la Cara Derecha del cubo (cada cosa
         //     en su propia cara).
@@ -361,6 +488,80 @@ public static class BombRoomSetup
             el.FindPropertyRelative("color").colorValue = CablesModule.PuzzleColors[i];
             el.FindPropertyRelative("connected").boolValue = false;
         }
+        so.ApplyModifiedProperties();
+        so.Dispose();
+    }
+
+    /// <summary>
+    /// Puzzle "Simón" ENTERO sobre la cara izquierda del cubo: rejilla 3x3 de
+    /// botones de color. La bomba muestra una secuencia y el jugador la repite.
+    /// </summary>
+    private static void BuildSimon(SimonModule module, Material[] buttonMats, Material panelMat)
+    {
+        int size = SimonModule.Layout.GridSize;
+        float spacing = SimonModule.Layout.Spacing;
+        int n = size * size;
+
+        // Fondo de la cara izquierda (sin collider), con marco alrededor.
+        float panelW = spacing * size + 0.02f;
+        float panelH = 0.52f; // algo más alto para dejar hueco al botón START
+        Cube(module.transform, "SimonPanel", new Vector3(SimonModule.Layout.PanelX, 0f, 0f),
+            new Vector3(0.014f, panelH, panelW), panelMat);
+
+        // Rejilla 3x3: centrada un poco arriba para dejar sitio al START debajo.
+        GameObject[] gos = new GameObject[n];
+        float half = (size - 1) * 0.5f * spacing;
+        float gridCenterY = 0.08f;
+        for (int row = 0; row < size; row++)
+        {
+            for (int col = 0; col < size; col++)
+            {
+                int index = row * size + col;
+                float y = gridCenterY + half - row * spacing;
+                float z = half - col * spacing;
+
+                GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                button.name = $"SimonButton_{index}";
+                button.transform.SetParent(module.transform, false);
+                button.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, y, z);
+                button.transform.localScale = Vector3.one * SimonModule.Layout.ButtonSize;
+                button.GetComponent<Renderer>().sharedMaterial = buttonMats[index];
+                button.AddComponent<XRSimpleInteractable>();
+                gos[index] = button;
+            }
+        }
+
+        // Botón START para comenzar la ronda cuando el jugador quiera.
+        GameObject startBtn = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        startBtn.name = "SimonStartButton";
+        startBtn.transform.SetParent(module.transform, false);
+        startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.225f, 0f);
+        startBtn.transform.localScale = new Vector3(0.06f, 0.09f, 0.18f);
+        startBtn.GetComponent<Renderer>().sharedMaterial =
+            GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.2f);
+        startBtn.AddComponent<XRSimpleInteractable>();
+
+        // Etiqueta "START" (canvas world-space pequeño orientado hacia -X).
+        GameObject labelGo = new GameObject("SimonStartLabel");
+        labelGo.transform.SetParent(module.transform, false);
+        labelGo.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.225f, 0f);
+        labelGo.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
+        labelGo.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+        Canvas canvas = labelGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        TextMeshProUGUI text = CreateText(labelGo.transform, "StartText", new Vector2(0f, 0f), new Vector2(160f, 80f), 55f, Color.white);
+        text.text = "START";
+
+        var so = new SerializedObject(module);
+        SerializedProperty arr = so.FindProperty("buttons");
+        arr.arraySize = n;
+        for (int i = 0; i < n; i++)
+        {
+            SerializedProperty el = arr.GetArrayElementAtIndex(i);
+            el.FindPropertyRelative("gameObject").objectReferenceValue = gos[i];
+            el.FindPropertyRelative("color").colorValue = SimonModule.ButtonColors[i];
+        }
+        so.FindProperty("startButton").objectReferenceValue = startBtn;
         so.ApplyModifiedProperties();
         so.Dispose();
     }

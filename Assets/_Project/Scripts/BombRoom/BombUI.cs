@@ -26,6 +26,7 @@ public class BombUI : MonoBehaviour
     private TimerSystem timer;
     private StrikeSystem strikes;
     private readonly List<CablesModule> cables = new List<CablesModule>();
+    private readonly List<SimonModule> simon = new List<SimonModule>();
     private readonly List<BombArmButton> armButtons = new List<BombArmButton>();
 
     private readonly List<Material> ledMats = new List<Material>();
@@ -48,6 +49,9 @@ public class BombUI : MonoBehaviour
 
         cables.Clear();
         cables.AddRange(FindObjectsByType<CablesModule>());
+
+        simon.Clear();
+        simon.AddRange(FindObjectsByType<SimonModule>());
 
         armButtons.Clear();
         armButtons.AddRange(FindObjectsByType<BombArmButton>());
@@ -101,6 +105,13 @@ public class BombUI : MonoBehaviour
             c.OnCableConnected += OnCableConnected;
             c.OnCableWrong += OnCableWrong;
         }
+        foreach (var s in simon)
+        {
+            if (s == null) continue;
+            s.OnSimonWrong += OnSimonWrong;
+            s.OnRoundComplete += OnRoundComplete;
+            s.OnSimonComplete += OnSimonComplete;
+        }
         foreach (var b in armButtons)
         {
             if (b == null) continue;
@@ -122,6 +133,13 @@ public class BombUI : MonoBehaviour
             if (c == null) continue;
             c.OnCableConnected -= OnCableConnected;
             c.OnCableWrong -= OnCableWrong;
+        }
+        foreach (var s in simon)
+        {
+            if (s == null) continue;
+            s.OnSimonWrong -= OnSimonWrong;
+            s.OnRoundComplete -= OnRoundComplete;
+            s.OnSimonComplete -= OnSimonComplete;
         }
         foreach (var b in armButtons)
         {
@@ -162,17 +180,26 @@ public class BombUI : MonoBehaviour
                 break;
 
             case BombState.Running:
+                var parts = new List<string>();
                 if (cables.Count > 0)
                 {
                     int done = 0;
                     foreach (var c in cables)
                         if (c != null) done += c.ConnectedCount;
-                    statusText.text = $"Conecta los cables ({done}/3)";
+                    parts.Add($"cables {done}/3");
                 }
-                else
+                if (simon.Count > 0)
                 {
-                    statusText.text = "Resuelve los módulos";
+                    int done = 0, total = 0;
+                    foreach (var s in simon)
+                    {
+                        if (s == null) continue;
+                        done += s.RoundsCompleted;
+                        total += s.TotalRounds;
+                    }
+                    parts.Add($"simón {done}/{total}");
                 }
+                statusText.text = parts.Count > 0 ? "Resuelve: " + string.Join(" · ", parts) : "Resuelve los módulos";
                 statusText.color = Color.white;
                 break;
 
@@ -252,16 +279,43 @@ public class BombUI : MonoBehaviour
     private void OnCableConnected(Color color)
     {
         ShowFeedback($"CONECTADO {BombRoomPalette.NameOf(color)} ✓", new Color(0.35f, 1f, 0.4f));
+        RefreshStatus();
     }
 
     private void OnCableWrong()
     {
         ShowFeedback("¡CABLE EQUIVOCADO! ⚡", new Color(1f, 0.45f, 0.2f));
+        RefreshStatus();
+    }
+
+    // ------------------------------------------------------------------ Simón
+
+    private void OnSimonWrong()
+    {
+        ShowFeedback("¡SECUENCIA MAL! ✗", new Color(1f, 0.45f, 0.2f));
+        RefreshStatus();
+    }
+
+    private void OnRoundComplete(int round, int total)
+    {
+        ShowFeedback($"¡RONDA {round}/{total} OK! ✓", new Color(0.35f, 1f, 0.4f));
+        RefreshStatus();
+    }
+
+    private void OnSimonComplete()
+    {
+        ShowFeedback("¡SIMÓN OK! ✓", new Color(0.35f, 1f, 0.4f));
+        RefreshStatus();
+    }
+
+    private void RefreshStatus()
+    {
+        if (bomb != null) UpdateStatus(bomb.State);
     }
 
     private void OnArmDenied()
     {
-        ShowFeedback("¡Todavía no! Resuelve los cables", new Color(1f, 0.6f, 0.3f));
+        ShowFeedback("¡Todavía no! Resuelve los módulos", new Color(1f, 0.6f, 0.3f));
     }
 
     private void OnBombReset()

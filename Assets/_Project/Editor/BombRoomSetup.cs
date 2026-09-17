@@ -474,39 +474,51 @@ public static class BombRoomSetup
         Transform[] tips = new Transform[n];
         LineRenderer[] cords = new LineRenderer[n];
 
-        float stubLen = (CablesModule.Layout.MidX - CablesModule.Layout.LeftX) * 0.5f;
-        float stubCenterX = (CablesModule.Layout.LeftX + CablesModule.Layout.MidX) * 0.5f;
-
         for (int i = 0; i < n; i++)
         {
             float y = CablesModule.Layout.Row0Y - i * CablesModule.Layout.RowSpacing;
 
+            // 1. Salida en la pared de la bomba (ancla fija del cable)
+            GameObject tip = new GameObject($"Cable_{i}_Tip");
+            tip.transform.SetParent(cablesParent.transform, false);
+            tip.transform.localPosition = new Vector3(CablesModule.Layout.LeftX, y, CablesModule.Layout.PlaneZ);
+
+            // 2. Mango del cable (cilindro horizontal agarrable)
             GameObject stub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             stub.name = $"Cable_{i}_Stub";
             stub.transform.SetParent(cablesParent.transform, false);
-            stub.transform.localPosition = new Vector3(stubCenterX, y, CablesModule.Layout.PlaneZ);
-            stub.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            stub.transform.localScale = new Vector3(CablesModule.Layout.CordRadius * 2f, stubLen, CablesModule.Layout.CordRadius * 2f);
+            stub.transform.localPosition = new Vector3(CablesModule.Layout.MidX, y, CablesModule.Layout.PlaneZ);
+            stub.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
+            stub.transform.localScale = new Vector3(0.035f, 0.045f, 0.035f);
             stub.GetComponent<Renderer>().sharedMaterial = cableMats[i];
-            DestroyCollider(stub);
 
-            GameObject tip = new GameObject($"Cable_{i}_Tip");
-            tip.transform.SetParent(cablesParent.transform, false);
-            tip.transform.localPosition = new Vector3(CablesModule.Layout.MidX, y, CablesModule.Layout.PlaneZ);
+            CapsuleCollider stubCol = stub.GetComponent<CapsuleCollider>();
+            if (stubCol == null) stubCol = stub.AddComponent<CapsuleCollider>();
+            stubCol.direction = 1; // Eje Y del cilindro
+            stubCol.radius = 0.5f;
+            stubCol.height = 2f;
 
+            // 3. Clavija de contacto (esfera unida directamente al mango en el extremo frontal)
             GameObject plug = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             plug.name = $"Cable_{i}_Plug";
-            plug.transform.SetParent(cablesParent.transform, false);
-            plug.transform.localPosition = new Vector3(CablesModule.Layout.MidX, y, CablesModule.Layout.PlaneZ);
-            plug.transform.localScale = Vector3.one * (CablesModule.Layout.PlugRadius * 2f);
+            plug.transform.SetParent(stub.transform, false);
+            plug.transform.localPosition = new Vector3(0f, 1.0f, 0f);
+            plug.transform.localRotation = Quaternion.identity;
+            plug.transform.localScale = new Vector3(0.07f / 0.035f, 0.07f / 0.045f, 0.07f / 0.035f);
             plug.GetComponent<Renderer>().sharedMaterial = cableMats[i];
 
+            SphereCollider plugCol = plug.GetComponent<SphereCollider>();
+            if (plugCol == null) plugCol = plug.AddComponent<SphereCollider>();
+            plugCol.radius = 0.5f;
+
+            // 4. Cordón flexible (LineRenderer entre la pared y el mango)
             GameObject cord = new GameObject($"Cable_{i}_Cord");
             cord.transform.SetParent(cablesParent.transform, false);
             LineRenderer line = cord.AddComponent<LineRenderer>();
             CablesModule.ConfigureLine(line, CablesModule.PuzzleColors[i], cordMats[i]);
+            Vector3 backPoint = stub.transform.position + (stub.transform.position - plug.transform.position);
             line.SetPosition(0, tip.transform.position);
-            line.SetPosition(1, plug.transform.position);
+            line.SetPosition(1, backPoint);
 
             stubs[i] = stub;
             plugs[i] = plug;

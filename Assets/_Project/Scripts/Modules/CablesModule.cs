@@ -23,16 +23,16 @@ public class CablesModule : ModuleBase
     /// <summary>Medidas del puzzle, en metros, en espacio local del cubo.</summary>
     public static class Layout
     {
-        public const float LeftX = -0.34f;   // extremo izquierdo de los cables
-        public const float MidX = -0.09f;    // conector en reposo
-        public const float RightX = 0.30f;   // tomas de la derecha
+        public const float LeftX = -0.34f;   // salida del cable en la pared izquierda
+        public const float MidX = -0.14f;    // posición de reposo del mango (stub)
+        public const float RightX = 0.30f;   // tomas de la derecha (sockets)
         public const float PlaneZ = 0.315f;  // cara frontal del cubo (+Z)
         public const float Row0Y = 0.10f;
         public const float RowSpacing = 0.15f;
-        public const float PlugRadius = 0.038f;
+        public const float PlugRadius = 0.035f;
         public const float SocketSize = 0.085f;
         public const float CordRadius = 0.013f;
-        public const float SnapDistance = 0.12f;
+        public const float SnapDistance = 0.14f;
     }
 
     /// <summary>Colores del puzzle: rojo, azul y amarillo.</summary>
@@ -57,7 +57,9 @@ public class CablesModule : ModuleBase
         [NonSerialized] public Vector3 homeLocalPos;
         [NonSerialized] public Quaternion homeLocalRot;
         [NonSerialized] public XRGrabInteractable grab;
-        [NonSerialized] public Material material;
+        [NonSerialized] public Material plugMaterial;
+        [NonSerialized] public Material stubMaterial;
+        public Material material => plugMaterial;
     }
 
     [Header("Estado (lo crea el constructor de la escena)")]
@@ -104,7 +106,7 @@ public class CablesModule : ModuleBase
         connectedCount = 0;
         foreach (CableState cable in cables)
         {
-            if (cable == null || cable.plug == null) continue;
+            if (cable == null || cable.stub == null || cable.plug == null) continue;
             PrepareCable(cable);
         }
     }
@@ -113,41 +115,89 @@ public class CablesModule : ModuleBase
     private void PrepareCable(CableState cable)
     {
         cable.connected = false;
-        cable.homeLocalPos = cable.plug.transform.localPosition;
-        cable.homeLocalRot = cable.plug.transform.localRotation;
 
-        Renderer rend = cable.plug.GetComponent<Renderer>();
-        if (rend != null)
+        // Asegurar que plug está unido como hijo de stub para que se muevan siempre juntos
+        if (cable.plug.transform.parent != cable.stub.transform)
         {
-            if (rend.sharedMaterial != null)
-            {
-                cable.material = new Material(rend.sharedMaterial);
-                rend.sharedMaterial = cable.material;
-            }
-            else if (cable.material == null)
-            {
-                cable.material = Fx.Lit(cable.color);
-                rend.sharedMaterial = cable.material;
-            }
+            cable.plug.transform.SetParent(cable.stub.transform, true);
         }
 
-        Rigidbody rb = cable.plug.GetComponent<Rigidbody>();
-        if (rb == null) rb = cable.plug.AddComponent<Rigidbody>();
+        // Limpiar rigidbodies o interactables previos en plug para evitar conflictos
+        var oldGrab = cable.plug.GetComponent<XRGrabInteractable>();
+        if (oldGrab != null) Destroy(oldGrab);
+        var oldRb = cable.plug.GetComponent<Rigidbody>();
+        if (oldRb != null) Destroy(oldRb);
+
+        // Asegurar colliders activos en stub y plug
+        CapsuleCollider stubCol = cable.stub.GetComponent<CapsuleCollider>();
+        if (stubCol == null)
+        {
+            stubCol = cable.stub.AddComponent<CapsuleCollider>();
+            stubCol.direction = 1; // Eje Y del cilindro
+            stubCol.radius = 0.5f;
+            stubCol.height = 2f;
+        }
+        stubCol.enabled = true;
+
+        SphereCollider plugCol = cable.plug.GetComponent<SphereCollider>();
+        if (plugCol == null)
+        {
+            plugCol = cable.plug.AddComponent<SphereCollider>();
+            plugCol.radius = 0.5f;
+        }
+        plugCol.enabled = true;
+
+        // Guardar posición y rotación inicial del conjunto agarrable (stub)
+        cable.homeLocalPos = cable.stub.transform.localPosition;
+        cable.homeLocalRot = cable.stub.transform.localRotation;
+
+        // Instanciar materiales para control de emisión independiente
+        Renderer rendPlug = cable.plug.GetComponent<Renderer>();
+        if (rendPlug != null)
+        {
+            if (rendPlug.sharedMaterial != null)
+                cable.plugMaterial = new Material(rendPlug.sharedMaterial);
+            else
+                cable.plugMaterial = Fx.Lit(cable.color);
+            rendPlug.sharedMaterial = cable.plugMaterial;
+        }
+
+        Renderer rendStub = cable.stub.GetComponent<Renderer>();
+        if (rendStub != null)
+        {
+            if (rendStub.sharedMaterial != null)
+                cable.stubMaterial = new Material(rendStub.sharedMaterial);
+            else
+                cable.stubMaterial = Fx.Lit(cable.color);
+            rendStub.sharedMaterial = cable.stubMaterial;
+        }
+
+        // Rigidbody kinemático en stub
+        Rigidbody rb = cable.stub.GetComponent<Rigidbody>();
+        if (rb == null) rb = cable.stub.AddComponent<Rigidbody>();
         rb.isKinematic = true;
         rb.useGravity = false;
 
+        // XRGrabInteractable en stub que incluye ambos colliders (stub y plug)
         XRGrabInteractable grab = cable.grab != null
             ? cable.grab
-            : cable.plug.GetComponent<XRGrabInteractable>();
-        if (grab == null) grab = cable.plug.AddComponent<XRGrabInteractable>();
+            : cable.stub.GetComponent<XRGrabInteractable>();
+        if (grab == null) grab = cable.stub.AddComponent<XRGrabInteractable>();
+
         grab.useDynamicAttach = true;
         grab.trackPosition = true;
         grab.trackRotation = true;
         grab.throwOnDetach = false;
         grab.movementType = XRBaseInteractable.MovementType.Instantaneous;
 
+        grab.colliders.Clear();
+        grab.colliders.Add(stubCol);
+        grab.colliders.Add(plugCol);
+
         cable.grab = grab;
         CableState captured = cable;
+        grab.selectEntered.RemoveAllListeners();
+        grab.selectExited.RemoveAllListeners();
         grab.selectEntered.AddListener(_ => OnPlugGrabbed(captured));
         grab.selectExited.AddListener(_ => OnPlugReleased(captured));
     }
@@ -197,35 +247,47 @@ public class CablesModule : ModuleBase
 
     private static CableState CreateCable(Transform parent, int index, float y, Color color)
     {
-        Vector3 rowPos = new Vector3(0f, y, Layout.PlaneZ);
+        // 1. Salida en la pared de la bomba (ancla del cordón)
+        GameObject tip = new GameObject($"Cable_{index}_Tip");
+        tip.transform.SetParent(parent, false);
+        tip.transform.localPosition = new Vector3(Layout.LeftX, y, Layout.PlaneZ);
 
+        // 2. Mango del cable (cilindro horizontal agarrable)
         GameObject stub = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         stub.name = $"Cable_{index}_Stub";
         stub.transform.SetParent(parent, false);
-        float stubLen = (Layout.MidX - Layout.LeftX) * 0.5f;
-        float stubCenterX = (Layout.LeftX + Layout.MidX) * 0.5f;
-        stub.transform.localPosition = new Vector3(stubCenterX, y, Layout.PlaneZ);
-        stub.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
-        stub.transform.localScale = new Vector3(Layout.CordRadius * 2f, stubLen, Layout.CordRadius * 2f);
+        stub.transform.localPosition = new Vector3(Layout.MidX, y, Layout.PlaneZ);
+        stub.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
+        stub.transform.localScale = new Vector3(0.035f, 0.045f, 0.035f);
         stub.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color);
-        Fx.StripCollider(stub);
 
-        GameObject tip = new GameObject($"Cable_{index}_Tip");
-        tip.transform.SetParent(parent, false);
-        tip.transform.localPosition = new Vector3(Layout.MidX, y, Layout.PlaneZ);
+        CapsuleCollider stubCol = stub.GetComponent<CapsuleCollider>();
+        if (stubCol == null) stubCol = stub.AddComponent<CapsuleCollider>();
+        stubCol.direction = 1;
+        stubCol.radius = 0.5f;
+        stubCol.height = 2f;
 
+        // 3. Clavija de contacto (esfera unida al mango en el extremo derecho)
         GameObject plug = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         plug.name = $"Cable_{index}_Plug";
-        plug.transform.SetParent(parent, false);
-        plug.transform.localPosition = new Vector3(Layout.MidX, y, Layout.PlaneZ);
-        plug.transform.localScale = Vector3.one * (Layout.PlugRadius * 2f);
+        plug.transform.SetParent(stub.transform, false);
+        plug.transform.localPosition = new Vector3(0f, 1.0f, 0f);
+        plug.transform.localRotation = Quaternion.identity;
+        plug.transform.localScale = new Vector3(0.07f / 0.035f, 0.07f / 0.045f, 0.07f / 0.035f);
         plug.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color);
-        Fx.StripCollider(plug);
 
+        SphereCollider plugCol = plug.GetComponent<SphereCollider>();
+        if (plugCol == null) plugCol = plug.AddComponent<SphereCollider>();
+        plugCol.radius = 0.5f;
+
+        // 4. Cordón flexible (LineRenderer entre la pared y el mango)
         GameObject cord = new GameObject($"Cable_{index}_Cord");
         cord.transform.SetParent(parent, false);
         LineRenderer line = cord.AddComponent<LineRenderer>();
         ConfigureLine(line, color);
+        Vector3 backPoint = stub.transform.position + (stub.transform.position - plug.transform.position);
+        line.SetPosition(0, tip.transform.position);
+        line.SetPosition(1, backPoint);
 
         return new CableState
         {
@@ -278,14 +340,18 @@ public class CablesModule : ModuleBase
     {
         if (cable == null || cable.connected) return;
 
-        Vector3 pos = cable.plug.transform.position;
+        Vector3 plugPos = cable.plug.transform.position;
+        Vector3 stubPos = cable.stub.transform.position;
         CableState nearest = null;
         float bestDistance = Layout.SnapDistance;
 
         foreach (CableState other in cables)
         {
             if (other.socket == null) continue;
-            float d = Vector3.Distance(pos, other.socket.transform.position);
+            Vector3 sockPos = other.socket.transform.position;
+            float dPlug = Vector3.Distance(plugPos, sockPos);
+            float dStub = Vector3.Distance(stubPos, sockPos);
+            float d = Mathf.Min(dPlug, dStub);
             if (d < bestDistance)
             {
                 bestDistance = d;
@@ -320,7 +386,14 @@ public class CablesModule : ModuleBase
         connectedCount++;
 
         if (cable.grab != null) cable.grab.enabled = false;
-        cable.plug.transform.position = cable.socket.transform.position;
+
+        // Orientar horizontalmente hacia la toma
+        cable.stub.transform.localRotation = cable.homeLocalRot;
+
+        // Alinear la clavija (plug) exactamente en el centro de la toma (socket)
+        Vector3 delta = cable.socket.transform.position - cable.plug.transform.position;
+        cable.stub.transform.position += delta;
+
         SetEmission(cable, 2.2f);
         SFX.Play(SfxType.Snip, 0.8f);
 
@@ -332,15 +405,23 @@ public class CablesModule : ModuleBase
 
     private void ReturnHome(CableState cable)
     {
-        cable.plug.transform.localPosition = cable.homeLocalPos;
-        cable.plug.transform.localRotation = cable.homeLocalRot;
+        cable.stub.transform.localPosition = cable.homeLocalPos;
+        cable.stub.transform.localRotation = cable.homeLocalRot;
     }
 
     private void SetEmission(CableState cable, float intensity)
     {
-        if (cable.material == null) return;
-        cable.material.EnableKeyword("_EMISSION");
-        cable.material.SetColor("_EmissionColor", cable.color * intensity);
+        if (cable == null) return;
+        if (cable.plugMaterial != null)
+        {
+            cable.plugMaterial.EnableKeyword("_EMISSION");
+            cable.plugMaterial.SetColor("_EmissionColor", cable.color * intensity);
+        }
+        if (cable.stubMaterial != null)
+        {
+            cable.stubMaterial.EnableKeyword("_EMISSION");
+            cable.stubMaterial.SetColor("_EmissionColor", cable.color * intensity);
+        }
     }
 
     private void LateUpdate()
@@ -348,10 +429,14 @@ public class CablesModule : ModuleBase
         for (int i = 0; i < cables.Count; i++)
         {
             CableState cable = cables[i];
-            if (cable == null || cable.cord == null || cable.stubTip == null || cable.plug == null) continue;
+            if (cable == null || cable.cord == null || cable.stubTip == null || cable.stub == null || cable.plug == null) continue;
 
             cable.cord.SetPosition(0, cable.stubTip.position);
-            cable.cord.SetPosition(1, cable.plug.transform.position);
+
+            // El extremo posterior del mango donde entra el cordón
+            Vector3 backDir = (cable.stub.transform.position - cable.plug.transform.position);
+            Vector3 backPoint = cable.stub.transform.position + backDir;
+            cable.cord.SetPosition(1, backPoint);
         }
     }
 }

@@ -187,6 +187,7 @@ extern void CablesModule_SetEmission_m6842662090A154B58052B94266D96440A4CF4D8B (
 extern void CablesModule_LateUpdate_m7781DE5DDDC164287C1D6BFFF7612073E89A21DC (void);
 extern void CablesModule__ctor_m1DDD484BA975748FBB3358F4D0CE75B4D45537E7 (void);
 extern void CablesModule__cctor_mBD36417ED4F7F588E5761B5F525C1B0B5B8E143A (void);
+extern void CableState_get_material_mE9B0BD17CBB96831558FC0C941B6F407DF27479A (void);
 extern void CableState__ctor_m5DDA21874FCB68AB79E4FEB0EFAF5B9F50C7E5C5 (void);
 extern void U3CU3Ec__DisplayClass19_0__ctor_mCD8B4DDEF39252A60A2CABC1EFA30327DC4315A4 (void);
 extern void U3CU3Ec__DisplayClass19_0_U3CPrepareCableU3Eb__0_mDABA39AAF3BB42A0CC22EA50F7AF0DB9A505CB20 (void);
@@ -419,7 +420,7 @@ extern void XRSimulatorAutoDisable_Awake_mFCA1E9847992324AE1C74B54E2E409AC84CAD6
 extern void XRSimulatorAutoDisable_CleanupAndDestroy_m4BA8094CA7F70C3209E0477A0B5CC0E8BF031559 (void);
 extern void XRSimulatorAutoDisable_HasRealHmd_m27668EDDA3D305CFCBE80C43D43638B262DA3B04 (void);
 extern void XRSimulatorAutoDisable__ctor_m1FFA7FB883A0EB84FE6F99EC162BFB6EBBBF7876 (void);
-static Il2CppMethodPointer s_methodPointers[412] = 
+static Il2CppMethodPointer s_methodPointers[413] = 
 {
 	HeartRateReceiver_get_CurrentBpm_mD0236414D0B6F5DE6CE85795EA77F364556B60D2,
 	HeartRateReceiver_set_CurrentBpm_m58A027FF6DF8C3352A66EDA70B631185AAD028A8,
@@ -601,6 +602,7 @@ static Il2CppMethodPointer s_methodPointers[412] =
 	CablesModule_LateUpdate_m7781DE5DDDC164287C1D6BFFF7612073E89A21DC,
 	CablesModule__ctor_m1DDD484BA975748FBB3358F4D0CE75B4D45537E7,
 	CablesModule__cctor_mBD36417ED4F7F588E5761B5F525C1B0B5B8E143A,
+	CableState_get_material_mE9B0BD17CBB96831558FC0C941B6F407DF27479A,
 	CableState__ctor_m5DDA21874FCB68AB79E4FEB0EFAF5B9F50C7E5C5,
 	U3CU3Ec__DisplayClass19_0__ctor_mCD8B4DDEF39252A60A2CABC1EFA30327DC4315A4,
 	U3CU3Ec__DisplayClass19_0_U3CPrepareCableU3Eb__0_mDABA39AAF3BB42A0CC22EA50F7AF0DB9A505CB20,
@@ -838,7 +840,7 @@ IL2CPP_EXTERN_C const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule;
 const Il2CppCodeGenModule g_AssemblyU2DCSharp_CodeGenModule = 
 {
 	"Assembly-CSharp.dll",
-	412,
+	413,
 	s_methodPointers,
 	0,
 	NULL,

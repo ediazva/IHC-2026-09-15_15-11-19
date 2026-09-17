@@ -1175,7 +1175,9 @@
           },
           {
             "name": "CapsuleCollider",
-            "scenes": [],
+            "scenes": [
+              "Assets/_Project/Scenes/BombRoom.unity"
+            ],
             "dependencyType": 0,
             "icon": null
           },

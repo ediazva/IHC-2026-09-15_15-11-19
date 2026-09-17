@@ -119,6 +119,10 @@ public static class BombRoomSetup
         EnsureLighting();
         EnsureGround(root);
 
+        // XRInteractionManager: sin él los interactors no detectan interactables.
+        if (Object.FindAnyObjectByType<XRInteractionManager>() == null)
+            root.AddComponent<XRInteractionManager>();
+
         float tableTop = BuildTable(root);
         BuildBomb(root, tableTop);
         BuildResetButton(root, tableTop);
@@ -189,6 +193,21 @@ public static class BombRoomSetup
         EditorUtility.SetDirty(grab);
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("<color=#7CFC00>[Bomba VR] Colliders del grab reparados: solo el cuerpo. Guarda la escena (Cmd+S).</color>");
+    }
+
+    [MenuItem("Bomba VR/Añadir XRInteractionManager a la escena", false, 102)]
+    public static void AddXRInteractionManager()
+    {
+        if (Object.FindAnyObjectByType<XRInteractionManager>() != null)
+        {
+            Debug.LogWarning("[Bomba VR] Ya hay un XRInteractionManager en la escena.");
+            return;
+        }
+
+        GameObject go = new GameObject("XR Interaction Manager");
+        go.AddComponent<XRInteractionManager>();
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        Debug.Log("<color=#7CFC00>[Bomba VR] XRInteractionManager añadido. Guarda la escena (Cmd+S). Los interactors ahora podrán detectar los interactables.</color>");
     }
 
     [MenuItem("Bomba VR/Enfocar la vista Scene en la sala", false, 0)]

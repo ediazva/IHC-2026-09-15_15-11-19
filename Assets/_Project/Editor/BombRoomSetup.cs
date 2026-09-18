@@ -210,6 +210,36 @@ public static class BombRoomSetup
         Debug.Log("<color=#7CFC00>[Bomba VR] XRInteractionManager añadido. Guarda la escena (Cmd+S). Los interactors ahora podrán detectar los interactables.</color>");
     }
 
+    /// <summary>
+    /// Activa el keyword _EMISSION en todos los materiales de Assets/_Project/Materials/BombRoom
+    /// USANDO el API de Unity (no edición manual de YAML), para que el build de URP conserve la
+    /// variante de emisión y los flashes animados (Simón, cables, LEDs) se vean en el visor.
+    /// Es necesario ejecutarlo con el Editor: los cambios hechos a mano al .mat se pierden al
+    /// volver a guardar Unity.
+    /// </summary>
+    [MenuItem("Bomba VR/Fix ▶ Habilitar emisión de materiales VR (_EMISSION)", false, 103)]
+    public static void FixEmissionKeywords()
+    {
+        string[] guids = AssetDatabase.FindAssets("t:Material", new[] { MaterialFolder });
+        int fixedCount = 0;
+        int total = 0;
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            Material mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null || !mat.HasProperty("_EmissionColor")) continue;
+            total++;
+            if (!mat.IsKeywordEnabled("_EMISSION"))
+            {
+                mat.EnableKeyword("_EMISSION");
+                fixedCount++;
+            }
+            EditorUtility.SetDirty(mat);
+        }
+        AssetDatabase.SaveAssets();
+        Debug.Log($"<color=#7CFC00>[Bomba VR] Keyword _EMISSION habilitado en {fixedCount}/{total} materiales. Guarda la escena (Cmd+S) y vuelve a compilar para Quest.</color>");
+    }
+
     [MenuItem("Bomba VR/Enfocar la vista Scene en la sala", false, 0)]
     public static void FocusSceneViewOnRoom()
     {

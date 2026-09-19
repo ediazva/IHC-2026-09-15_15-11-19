@@ -1,6 +1,6 @@
+using System;
 using UnityEngine;
-using UnityEngine.XR.Interaction.Toolkit;
-using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using Oculus.Interaction;
 
 /// <summary>
 /// Marca un objeto como "herramienta de corte" (tag Cutter) y expone cuántos
@@ -13,30 +13,37 @@ public class CuttingTool : MonoBehaviour
 
     public static bool AnyHeld => heldCount > 0;
 
-    private XRGrabInteractable grab;
+    private GrabInteractable grab;
+    private Action<InteractableStateChangeArgs> handler;
 
     private void Awake()
     {
-        grab = GetComponent<XRGrabInteractable>();
-        if (grab == null) grab = GetComponentInParent<XRGrabInteractable>();
+        grab = GetComponent<GrabInteractable>();
+        if (grab == null) grab = GetComponentInParent<GrabInteractable>();
     }
 
     private void OnEnable()
     {
-        if (grab != null)
+        if (grab == null)
         {
-            grab.selectEntered.AddListener(OnSelected);
-            grab.selectExited.AddListener(OnDeselected);
+            Rigidbody rb = GetComponent<Rigidbody>();
+            if (rb == null)
+            {
+                rb = gameObject.AddComponent<Rigidbody>();
+                rb.isKinematic = true;
+                rb.useGravity = false;
+            }
+            grab = Isdk.Grab(gameObject, rb);
         }
+        if (grab != null)
+            handler = Isdk.Bind(grab, OnGrabbed, OnReleased, handler);
     }
 
     private void OnDisable()
     {
-        if (grab != null)
-        {
-            grab.selectEntered.RemoveListener(OnSelected);
-            grab.selectExited.RemoveListener(OnDeselected);
-        }
+        if (grab != null && handler != null)
+            grab.WhenStateChanged -= handler;
+        handler = null;
     }
 
     private void OnDestroy()
@@ -44,12 +51,12 @@ public class CuttingTool : MonoBehaviour
         heldCount = Mathf.Max(0, heldCount - 1);
     }
 
-    private void OnSelected(SelectEnterEventArgs _)
+    private void OnGrabbed()
     {
         heldCount++;
     }
 
-    private void OnDeselected(SelectExitEventArgs _)
+    private void OnReleased()
     {
         heldCount = Mathf.Max(0, heldCount - 1);
     }

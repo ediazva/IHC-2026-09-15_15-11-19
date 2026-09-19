@@ -5,9 +5,6 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
-using UnityEngine.XR.Interaction.Toolkit;
-using UnityEngine.XR.Interaction.Toolkit.Interactables;
-using UnityEngine.XR.Interaction.Toolkit.UI;
 using VRInteractionPrototype;
 
 /// <summary>
@@ -17,28 +14,19 @@ using VRInteractionPrototype;
 ///    LEDs, HUD y botón de reinicio. Todo queda como objetos de la escena
 ///    (visible antes de pulsar Play) y con materiales reales como assets bajo
 ///    Assets/_Project/Materials/BombRoom.
-///  * Añadir el rig XR y el simulador XRI para probar sin visor.
+///  * Los interactables los crea Meta Interaction SDK (ISDK) vía el helper
+///    Isdk (Poke/Grab) y el rig de manos se instala con Building Blocks
+///    "Interactions Rig" (ver IsdkMigration).
 /// </summary>
 public static class BombRoomSetup
 {
-    private const string RigPath = "Assets/Samples/XR Interaction Toolkit/3.5.1/Starter Assets/Prefabs/XR Origin (XR Rig).prefab";
-    private const string SimulatorPath = "Assets/Samples/XR Interaction Toolkit/3.6.0/XR Interaction Simulator/XR Interaction Simulator.prefab";
-    private const string SimulatorUiPath = "Assets/Samples/XR Interaction Toolkit/3.6.0/XR Interaction Simulator/UI/XR Interaction Simulator UI.prefab";
-    private const string TablePath = "Assets/Tables and Chairs/Prefabs/Table1.prefab";
-
     private const string ScenePath = "Assets/_Project/Scenes/BombRoom.unity";
     private const string MaterialFolder = "Assets/_Project/Materials/BombRoom";
 
-    [MenuItem("Bomba VR/Crear escena BombRoom (para Cascos VR / OpenXR)", false, 1)]
+    [MenuItem("Bomba VR/Crear escena BombRoom (para Quest / OpenXR / ISDK)", false, 1)]
     public static void CreateBombRoom()
     {
-        CreateBombRoomScene(addXriSimulator: false, path: ScenePath);
-    }
-
-    [MenuItem("Bomba VR/Crear escena BombRoom (con Simulador XRI teclado+ratón)", false, 2)]
-    public static void CreateBombRoomWithSimulator()
-    {
-        CreateBombRoomScene(addXriSimulator: true, path: ScenePath);
+        CreateBombRoomScene(path: ScenePath);
     }
 
     [MenuItem("Bomba VR/Abrir escena BombRoom", false, 0)]
@@ -53,54 +41,18 @@ public static class BombRoomSetup
         Debug.Log($"<color=#7CFC00>[Bomba VR] Escena abierta: {ScenePath}. En la ventana Hierarchy verás BombRoom con la mesa y la bomba.</color>");
     }
 
-    [MenuItem("Bomba VR/Crear escena BombRoom (para Meta XR Simulator)", false, 3)]
-    public static void CreateBombRoomForMetaSimulator()
-    {
-        // Con el simulador de Meta el rig XR debe recibir el HMD+mandos/manos de
-        // OpenXR, por lo que NO se añade el simulador de XRI (si no, se pelean).
-        CreateBombRoomScene(addXriSimulator: false, path: ScenePath);
-    }
-
-    private static void CreateBombRoomScene(bool addXriSimulator, string path)
+    private static void CreateBombRoomScene(string path)
     {
         EnsureSceneFolder();
 
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
         EnsureEventSystem();
-        GameObject rig = InstantiatePrefab(RigPath);
-        if (rig != null)
-        {
-            rig.transform.position = new Vector3(0f, 0f, 0.85f);
-            rig.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
-        }
-
-        if (addXriSimulator)
-        {
-            GameObject sim = InstantiatePrefab(SimulatorPath);
-            GameObject simUi = InstantiatePrefab(SimulatorUiPath);
-            if (sim != null)
-            {
-                var autoDisable = sim.AddComponent<XRSimulatorAutoDisable>();
-                if (simUi != null)
-                {
-                    var so = new SerializedObject(autoDisable);
-                    var uiProp = so.FindProperty("simulatorUi");
-                    if (uiProp != null)
-                    {
-                        uiProp.objectReferenceValue = simUi;
-                        so.ApplyModifiedProperties();
-                    }
-                }
-            }
-        }
 
         BuildRoomInScene();
 
         EditorSceneManager.SaveScene(scene, path);
-        Debug.Log(addXriSimulator
-            ? $"<color=#7CFC00>[Bomba VR] Escena guardada en {path}. Incluye simulador de XRI protegido con auto-desactivación para visores.</color>"
-            : $"<color=#7CFC00>[Bomba VR] Escena guardada en {path} lista para cascos VR / OpenXR / Meta Simulator.</color>");
+        Debug.Log($"<color=#7CFC00>[Bomba VR] Escena guardada en {path}. El rig de manos NO se incluye: instálalo una vez con Meta → Building Blocks → 'Interactions Rig' (o ejecuta el menú de migración ISDK).</color>");
     }
 
     [MenuItem("Bomba VR/Construir sala en la escena actual")]
@@ -119,16 +71,12 @@ public static class BombRoomSetup
         EnsureLighting();
         EnsureGround(root);
 
-        // XRInteractionManager: sin él los interactors no detectan interactables.
-        if (Object.FindAnyObjectByType<XRInteractionManager>() == null)
-            root.AddComponent<XRInteractionManager>();
-
         float tableTop = BuildTable(root);
         BuildBomb(root, tableTop);
         BuildResetButton(root, tableTop);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-        Debug.Log("<color=#7CFC00>[Bomba VR] Sala construida en el editor. Revisa en la ventana Scene: mesa, bomba, cables, alicates, HUD y botón R. Pulsa Play para jugar.</color>");
+        Debug.Log("<color=#7CFC00>[Bomba VR] Sala construida en el editor. Revisa en la ventana Scene: mesa, bomba, cables, HUD y botón R. Pulsa Play para jugar.</color>");
     }
 
     [MenuItem("Bomba VR/Añadir módulo Simón a la bomba actual", false, 100)]
@@ -163,51 +111,48 @@ public static class BombRoomSetup
         Debug.Log("<color=#7CFC00>[Bomba VR] Módulo Simón añadido a la cara izquierda. Guarda la escena (Cmd+S).</color>");
     }
 
-    [MenuItem("Bomba VR/Reparar colliders de la bomba (quitar avisos)", false, 101)]
-    public static void RepairBombColliders()
+    /// <summary>
+    /// Reconstruye la bomba de la escena actual con el cuerpo reducido, el
+    /// texto (HUD) fuera del cubo y el agarre ISDK completo (Grabbable) para
+    /// que la bomba se mueva con las manos. Recalcula la altura del tablero
+    /// a partir de la mesa existente y preserva suelo, mesa, luces y el rig.
+    /// </summary>
+    [MenuItem("Bomba VR/Reconstruir bomba (cubo pequeño, texto fuera, agarre con manos)", false, 101)]
+    public static void RebuildBomb()
     {
-        BombManager bomb = Object.FindAnyObjectByType<BombManager>();
-        if (bomb == null)
+        GameObject root = null;
+        foreach (GameObject go in SceneManager.GetActiveScene().GetRootGameObjects())
         {
-            Debug.LogError("[Bomba VR] No hay ninguna bomba (BombManager) en la escena.");
+            if (go != null && go.name == "BombRoom") { root = go; break; }
+        }
+        if (root == null)
+        {
+            Debug.LogWarning("[Bomba VR] No existe BombRoom en la escena activa. Ejecuta 'Construir sala en la escena actual' primero.");
             return;
         }
 
-        XRGrabInteractable grab = bomb.GetComponent<XRGrabInteractable>();
-        if (grab == null)
+        GameObject oldBomb = null;
+        foreach (Transform t in root.transform)
         {
-            Debug.LogWarning("[Bomba VR] La bomba no tiene XRGrabInteractable.");
-            return;
+            if (t != null && t.name == "Bomba") { oldBomb = t.gameObject; break; }
         }
 
-        Transform body = bomb.transform.Find("Body");
-        Collider bodyCollider = body != null ? body.GetComponent<Collider>() : null;
-        if (bodyCollider == null)
+        GameObject oldTable = null;
+        foreach (Transform t in root.transform)
         {
-            Debug.LogError("[Bomba VR] No se encontró el collider del cuerpo (hijo 'Body').");
-            return;
+            if (t != null && t.name == "Table") { oldTable = t.gameObject; break; }
         }
 
-        grab.colliders.Clear();
-        grab.colliders.Add(bodyCollider);
-        EditorUtility.SetDirty(grab);
+        if (oldBomb != null) Object.DestroyImmediate(oldBomb);
+        if (oldTable != null) Object.DestroyImmediate(oldTable);
+
+        EnsureMaterialsFolder();
+        float tableTop = BuildTable(root);
+        BuildBomb(root, tableTop);
+
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-        Debug.Log("<color=#7CFC00>[Bomba VR] Colliders del grab reparados: solo el cuerpo. Guarda la escena (Cmd+S).</color>");
-    }
-
-    [MenuItem("Bomba VR/Añadir XRInteractionManager a la escena", false, 102)]
-    public static void AddXRInteractionManager()
-    {
-        if (Object.FindAnyObjectByType<XRInteractionManager>() != null)
-        {
-            Debug.LogWarning("[Bomba VR] Ya hay un XRInteractionManager en la escena.");
-            return;
-        }
-
-        GameObject go = new GameObject("XR Interaction Manager");
-        go.AddComponent<XRInteractionManager>();
-        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-        Debug.Log("<color=#7CFC00>[Bomba VR] XRInteractionManager añadido. Guarda la escena (Cmd+S). Los interactors ahora podrán detectar los interactables.</color>");
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
+        Debug.Log($"<color=#7CFC00>[Bomba VR] Bomba reconstruida (tablero a {tableTop:F2}m). Cuerpo algo más pequeño, texto fuera y agarre con manos activo. Testea en Play.</color>");
     }
 
     /// <summary>
@@ -273,29 +218,6 @@ public static class BombRoomSetup
         Debug.Log("<color=#7CFC00>[Bomba VR] Vista Scene enfocada en la sala.</color>");
     }
 
-    [MenuItem("Bomba VR/Agregar simulador XR a la escena actual")]
-    public static void AddSimulatorToCurrentScene()
-    {
-        EnsureEventSystem();
-        GameObject sim = InstantiatePrefab(SimulatorPath);
-        GameObject simUi = InstantiatePrefab(SimulatorUiPath);
-        if (sim != null)
-        {
-            var autoDisable = sim.AddComponent<XRSimulatorAutoDisable>();
-            if (simUi != null)
-            {
-                var so = new SerializedObject(autoDisable);
-                var uiProp = so.FindProperty("simulatorUi");
-                if (uiProp != null)
-                {
-                    uiProp.objectReferenceValue = simUi;
-                    so.ApplyModifiedProperties();
-                }
-            }
-        }
-        Debug.Log("<color=#7CFC00>[Bomba VR] Simulador agregado con protección para cascos VR. Revisa que exista un XR Origin con interactores.</color>");
-    }
-
     [MenuItem("Bomba VR/Quitar simulador XRI de la escena actual (usar Meta XR Simulator)")]
     public static void RemoveSimulatorFromCurrentScene()
     {
@@ -303,13 +225,7 @@ public static class BombRoomSetup
         foreach (GameObject root in SceneManager.GetActiveScene().GetRootGameObjects())
         {
             if (root == null) continue;
-            string source = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(root);
-            if (string.IsNullOrEmpty(source))
-                source = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(
-                    root.transform.childCount > 0 ? root.transform.GetChild(0).gameObject : root);
-
-            bool isSimulator = source == SimulatorPath || source == SimulatorUiPath
-                || root.name.StartsWith("XR Interaction Simulator");
+            bool isSimulator = root.name.StartsWith("XR Interaction Simulator");
             if (!isSimulator) continue;
 
             Object.DestroyImmediate(root);
@@ -318,47 +234,19 @@ public static class BombRoomSetup
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log(removed > 0
-            ? $"<color=#7CFC00>[Bomba VR] Quitado el simulador de XRI ({removed} objeto/s). Ahora activa Meta → Meta XR Simulator → Activate.</color>"
+            ? $"<color=#7CFC00>[Bomba VR] Quitado el simulador de XRI ({removed} objeto/s).</color>"
             : "[Bomba VR] No se encontró el simulador de XRI en la escena.");
+    }
+
+    [MenuItem("Bomba VR/Agregar simulador XR a la escena actual")]
+    public static void AddSimulatorToCurrentScene()
+    {
+        Debug.LogWarning("[Bomba VR] El simulador de XRI dejó de usarse: la interacción ahora es con Meta Interaction SDK (manos). Para probar desde el editor usa Meta XR Simulator (Meta → Meta XR Simulator → Activate), o build en Quest.");
     }
 
     // ------------------------------------------------------------------ Sala
 
     private static float BuildTable(GameObject root)
-    {
-        GameObject tablePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(TablePath);
-        if (tablePrefab == null)
-        {
-            Debug.LogWarning($"[Bomba VR] No se encontró {TablePath}; se usa una mesa procedural de respaldo.");
-            return BuildFallbackTable(root);
-        }
-
-        GameObject table = (GameObject)PrefabUtility.InstantiatePrefab(tablePrefab);
-        table.name = "Table";
-        table.transform.SetParent(root.transform, true);
-        table.transform.position = Vector3.zero;
-
-        // Asegurar que el tablero cubre al menos la bomba (margen).
-        Renderer mr = table.GetComponentInChildren<MeshRenderer>();
-        if (mr != null)
-        {
-            float needW = 1.25f;
-            float needD = 0.8f;
-            float sx = Mathf.Max(1f, needW / Mathf.Max(0.01f, mr.bounds.size.x));
-            float sz = Mathf.Max(1f, needD / Mathf.Max(0.01f, mr.bounds.size.z));
-            float s = Mathf.Max(sx, sz);
-            if (s > 1.01f)
-            {
-                table.transform.localScale = Vector3.one * s;
-                mr = table.GetComponentInChildren<MeshRenderer>();
-            }
-            return mr.bounds.max.y;
-        }
-
-        return BuildFallbackTable(root);
-    }
-
-    private static float BuildFallbackTable(GameObject root)
     {
         GameObject table = new GameObject("Table");
         table.transform.SetParent(root.transform, false);
@@ -366,24 +254,25 @@ public static class BombRoomSetup
         Material wood = GetMaterial("Mat_Madera", new Color(0.45f, 0.29f, 0.16f), metallic: 0f, smoothness: 0.35f);
         Material leg = GetMaterial("Mat_Pata", new Color(0.22f, 0.22f, 0.24f));
 
-        Cube(table.transform, "Top", new Vector3(0f, 0.73f, 0f), new Vector3(1.5f, 0.05f, 0.95f), wood);
+        // Mesa pequeña: tablero a ~0.74 m (cintura de una persona de 1.70 m).
+        Cube(table.transform, "Top", new Vector3(0f, 0.72f, 0f), new Vector3(1.05f, 0.04f, 0.72f), wood);
 
         Vector3[] corners =
         {
-            new Vector3(-0.62f, 0.365f, -0.38f),
-            new Vector3(0.62f, 0.365f, -0.38f),
-            new Vector3(-0.62f, 0.365f, 0.38f),
-            new Vector3(0.62f, 0.365f, 0.38f),
+            new Vector3(-0.48f, 0.36f, -0.31f),
+            new Vector3(0.48f, 0.36f, -0.31f),
+            new Vector3(-0.48f, 0.36f, 0.31f),
+            new Vector3(0.48f, 0.36f, 0.31f),
         };
         foreach (Vector3 corner in corners)
-            Cube(table.transform, "Leg", corner, new Vector3(0.06f, 0.73f, 0.06f), leg);
+            Cube(table.transform, "Leg", corner, new Vector3(0.05f, 0.70f, 0.05f), leg);
 
-        return 0.755f;
+        return 0.74f;
     }
 
     private static void BuildBomb(GameObject root, float tableTop)
     {
-        const float bodyW = 0.9f, bodyH = 0.65f, bodyD = 0.6f;
+        const float bodyW = 0.6f, bodyH = 0.4f, bodyD = 0.4f;
         float bombCenterY = tableTop + bodyH * 0.5f;
 
         Material body = GetMaterial("Mat_Bomba", new Color(0.09f, 0.09f, 0.11f));
@@ -416,8 +305,8 @@ public static class BombRoomSetup
         bodyCube.GetComponent<Renderer>().sharedMaterial = body;
 
         // Panel frontal (visual, sin collider): fondo del puzzle de cables.
-        Cube(bomb.transform, "FrontPanel", new Vector3(0f, 0f, 0.302f),
-            new Vector3(0.86f, 0.62f, 0.01f), panel);
+        Cube(bomb.transform, "FrontPanel", new Vector3(0f, 0f, 0.196f),
+            new Vector3(0.52f, 0.34f, 0.01f), panel);
 
         // --- Sistemas de juego
         TimerSystem timer = bomb.AddComponent<TimerSystem>();
@@ -433,27 +322,16 @@ public static class BombRoomSetup
         Rigidbody bombRb = bomb.AddComponent<Rigidbody>();
         bombRb.isKinematic = true;
         bombRb.useGravity = false;
-        XRGrabInteractable grab = bomb.AddComponent<XRGrabInteractable>();
-        grab.useDynamicAttach = true;
-        grab.trackPosition = true;
-        grab.trackRotation = true;
-        grab.throwOnDetach = false;
-        grab.movementType = XRBaseInteractable.MovementType.Instantaneous;
-
-        // IMPORTANTE: si no se asignan, XRGrabInteractable usa TODOS los colliders
-        // hijos (botones, tomas, conectores...) y choca con sus interactables.
-        // Se limita al collider del cuerpo para poder agarrar la bomba sin robar
-        // la interacción a los módulos.
-        grab.colliders.Clear();
-        Collider bodyCollider = bodyCube.GetComponent<Collider>();
-        if (bodyCollider != null) grab.colliders.Add(bodyCollider);
+        // GrabInteractable de ISDK: admite todos los colliders del cuerpo (y módulos)
+        // para poder agarrar la bomba por cualquier lado sin robar el punteo (poke).
+        Isdk.Grab(bomb, bombRb);
 
         // --- LEDs de strike (filo superior frontal)
         Renderer[] leds = new Renderer[strikes.MaxStrikes];
         for (int i = 0; i < leds.Length; i++)
         {
-            float x = -0.22f + i * 0.11f;
-            GameObject led = Sphere(bomb.transform, $"StrikeLed_{i}", new Vector3(x, 0.285f, 0.26f), 0.045f, ledOff);
+            float x = -0.09f + i * 0.09f;
+            GameObject led = Sphere(bomb.transform, $"StrikeLed_{i}", new Vector3(x, 0.185f, 0.215f), 0.04f, ledOff);
             DestroyCollider(led);
             leds[i] = led.GetComponent<Renderer>();
         }
@@ -471,12 +349,13 @@ public static class BombRoomSetup
         SimonModule simon = simonGo.AddComponent<SimonModule>();
         BuildSimon(simon, simonMats, panel);
 
-        // --- HUD: contador pequeño en la Cara Derecha del cubo (cada cosa
-        //     en su propia cara).
+        // --- HUD: texto flotando en el aire, justo delante-encima del cubo,
+        //     completamente fuera del cuerpo para que se lea sin quedar
+        //     escondido dentro de la caja.
         GameObject hudGo = new GameObject("BombHUD");
         hudGo.transform.SetParent(bomb.transform, false);
-        hudGo.transform.localPosition = new Vector3(0.456f, 0f, 0f);
-        hudGo.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
+        hudGo.transform.localPosition = new Vector3(0f, 0.40f, 0.03f);
+        hudGo.transform.localRotation = Quaternion.identity;
         BombUI hud = hudGo.AddComponent<BombUI>();
         BuildHudCanvas(hud);
         hud.bomb = manager;
@@ -538,14 +417,14 @@ public static class BombRoomSetup
             stub.transform.SetParent(cablesParent.transform, false);
             stub.transform.localPosition = new Vector3(CablesModule.Layout.MidX, y, CablesModule.Layout.PlaneZ);
             stub.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
-            stub.transform.localScale = new Vector3(0.035f, 0.045f, 0.035f);
+            stub.transform.localScale = new Vector3(0.05f, 0.06f, 0.05f);
             stub.GetComponent<Renderer>().sharedMaterial = cableMats[i];
 
             CapsuleCollider stubCol = stub.GetComponent<CapsuleCollider>();
             if (stubCol == null) stubCol = stub.AddComponent<CapsuleCollider>();
             stubCol.direction = 1; // Eje Y del cilindro
-            stubCol.radius = 0.5f;
-            stubCol.height = 2f;
+            stubCol.radius = 0.6f;
+            stubCol.height = 2.2f;
 
             // 3. Clavija de contacto (esfera unida directamente al mango en el extremo frontal)
             GameObject plug = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -553,7 +432,7 @@ public static class BombRoomSetup
             plug.transform.SetParent(stub.transform, false);
             plug.transform.localPosition = new Vector3(0f, 1.0f, 0f);
             plug.transform.localRotation = Quaternion.identity;
-            plug.transform.localScale = new Vector3(0.07f / 0.035f, 0.07f / 0.045f, 0.07f / 0.035f);
+            plug.transform.localScale = new Vector3(0.07f / 0.05f, 0.07f / 0.06f, 0.07f / 0.05f);
             plug.GetComponent<Renderer>().sharedMaterial = cableMats[i];
 
             SphereCollider plugCol = plug.GetComponent<SphereCollider>();
@@ -627,7 +506,7 @@ public static class BombRoomSetup
                 button.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, y, z);
                 button.transform.localScale = Vector3.one * SimonModule.Layout.ButtonSize;
                 button.GetComponent<Renderer>().sharedMaterial = buttonMats[index];
-                button.AddComponent<XRSimpleInteractable>();
+                Isdk.Poke(button, new Vector3(-1f, 0f, 0f));
                 gos[index] = button;
             }
         }
@@ -641,8 +520,7 @@ public static class BombRoomSetup
         startBtn.GetComponent<Renderer>().sharedMaterial =
             GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.2f);
 
-        XRSimpleInteractable startInteractable = startBtn.AddComponent<XRSimpleInteractable>();
-        startInteractable.selectMode = InteractableSelectMode.Single;
+        Isdk.Poke(startBtn, new Vector3(-1f, 0f, 0f));
 
         // Etiqueta "START" (canvas world-space pequeño orientado hacia -X).
         GameObject labelGo = new GameObject("SimonStartLabel");
@@ -671,6 +549,10 @@ public static class BombRoomSetup
 
     private static void BuildHudCanvas(BombUI hud)
     {
+        // Placa oscura detrás del HUD para que el texto se lea bien en el aire.
+        Cube(hud.transform, "HudPlate", new Vector3(0f, 0f, -0.02f),
+            new Vector3(0.66f, 0.30f, 0.01f), GetMaterial("Mat_Panel", new Color(0.03f, 0.033f, 0.04f)));
+
         GameObject canvasGo = new GameObject("BombHUDCanvas");
         canvasGo.transform.SetParent(hud.transform, false);
         canvasGo.transform.localPosition = new Vector3(0f, 0f, 0f);
@@ -680,9 +562,9 @@ public static class BombRoomSetup
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
 
-        hud.timeText = CreateText(canvasGo.transform, "TimeText", new Vector2(0, 14), new Vector2(180, 62), 90, new Color(0.35f, 1f, 0.4f));
-        hud.statusText = CreateText(canvasGo.transform, "StatusText", new Vector2(0, -28), new Vector2(260, 50), 36, Color.white);
-        hud.feedbackText = CreateText(canvasGo.transform, "FeedbackText", new Vector2(0, -68), new Vector2(280, 44), 30, Color.white);
+        hud.timeText = CreateText(canvasGo.transform, "TimeText", new Vector2(0, 26), new Vector2(260, 90), 130, new Color(0.35f, 1f, 0.4f));
+        hud.statusText = CreateText(canvasGo.transform, "StatusText", new Vector2(0, -44), new Vector2(300, 60), 56, Color.white);
+        hud.feedbackText = CreateText(canvasGo.transform, "FeedbackText", new Vector2(0, -96), new Vector2(300, 50), 44, Color.white);
     }
 
     private static void BuildResetButton(GameObject root, float tableTop)
@@ -696,7 +578,7 @@ public static class BombRoomSetup
         button.transform.localScale = new Vector3(0.16f, 0.05f, 0.16f);
         button.GetComponent<Renderer>().sharedMaterial = buttonMat;
 
-        XRSimpleInteractable interactable = button.AddComponent<XRSimpleInteractable>();
+        Isdk.Poke(button, Vector3.up);
         BombResetButton resetBtn = button.AddComponent<BombResetButton>();
         resetBtn.bomb = Object.FindAnyObjectByType<BombManager>();
 
@@ -730,11 +612,11 @@ public static class BombRoomSetup
         GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube);
         button.name = "ArmButton";
         button.transform.SetParent(bomb, false);
-        button.transform.localPosition = new Vector3(0f, 0.36f, 0f);
-        button.transform.localScale = new Vector3(0.24f, 0.07f, 0.24f);
+        button.transform.localPosition = new Vector3(0f, 0.24f, 0f);
+        button.transform.localScale = new Vector3(0.22f, 0.06f, 0.22f);
         button.GetComponent<Renderer>().sharedMaterial = buttonMat;
 
-        button.AddComponent<XRSimpleInteractable>();
+        Isdk.Poke(button, Vector3.up);
         BombArmButton arm = button.AddComponent<BombArmButton>();
         arm.bomb = manager;
 
@@ -897,18 +779,6 @@ public static class BombRoomSetup
 
         GameObject es = new GameObject("EventSystem");
         es.AddComponent<EventSystem>();
-        es.AddComponent<XRUIInputModule>();
-    }
-
-    private static GameObject InstantiatePrefab(string path)
-    {
-        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-        if (prefab == null)
-        {
-            Debug.LogWarning($"[Bomba VR] No se encontró el prefab: {path}");
-            return null;
-        }
-        return (GameObject)PrefabUtility.InstantiatePrefab(prefab);
     }
 
     private static void EnsureSceneFolder()

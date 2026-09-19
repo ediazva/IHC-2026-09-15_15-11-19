@@ -373,7 +373,7 @@
       }
     },
     "com.unity.xr.androidxr-openxr": {
-      "version": "1.4.0",
+      "version": "1.4.1",
       "depth": 0,
       "source": "registry",
       "dependencies": {

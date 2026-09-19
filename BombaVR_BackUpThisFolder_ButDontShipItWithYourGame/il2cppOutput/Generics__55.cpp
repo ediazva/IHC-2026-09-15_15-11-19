@@ -78,28 +78,28 @@ struct IEnumerable_1_tC85705B62D666A5309DC111BD006DB7627866801;
 struct IEnumerable_1_t6AD47CB8BEC813E15985AA93F7394F6ECE74088A;
 struct IEnumerator_1_t8176B27803C4257135DA37CAF3F81760A94542D7;
 struct IEqualityComparer_1_t0706C8CEAD5235F761D9A8DB3AC57BA61E96F1C9;
+struct KeyCollection_t4A0B3AEB6AA6B370B5E594F12D681EACE1A5A5AE;
 struct KeyCollection_t327D4D1FD690BE20D4DFDAC6CC7E78B76A806A7B;
 struct KeyCollection_t115AE305F99D54BA31ABF3B908FAAAC00983BAD8;
 struct KeyCollection_tC0283B032D129E9E756D20853A1767C652609A51;
 struct KeyCollection_tEFD840755D5396EE29D6B1552AABB5295CA4E835;
 struct KeyCollection_t67341799E060B64E4AB3B36F954A1CCA0DC617D4;
-struct KeyCollection_t28D77C19D61EEDA8A160D77FB05BD496F5C30415;
 struct KeyCollection_tB792ACBAE0B99278B0B7B0F7440B4788E98F0D55;
 struct List_1_tCADB61FF5C88BAE9F3ADDA6F46BB3C39491B1C15;
 struct List_1_t9E5BCF6D9FEEC9DB4D4DED585C86CB51EDEC8160;
+struct ValueCollection_tCF9DCD993430A6A46FFA2E771FD05B49317CDD22;
 struct ValueCollection_t50C6A0DF958C9F3DBFA7C47ED9D3DC617477ECF2;
 struct ValueCollection_t56C8CB69FBAA4087D84DC8C135676DFD62DDF005;
 struct ValueCollection_t2637F1BFD3A5CAE25DC919B09A173D001668C905;
 struct ValueCollection_tAA0A5236B1CD6CE0188EB428953C8C87730B88A7;
 struct ValueCollection_tA3165AE1429C3FBD78FDA7BD14AC905D778EE4E1;
-struct ValueCollection_tC0CB8B0B026113F559ACAF272159E9C5265E28EE;
 struct ValueCollection_tC492596681BD51AB34FC76FA76C15C9B3FFB7B40;
+struct EntryU5BU5D_tBFE8C09AE2C2846A8B9D3105ABA9CB3BBD1D32DD;
 struct EntryU5BU5D_t2ADC19138A9A0C074B87F130257BB66992194175;
 struct EntryU5BU5D_tE1E56E2783AB8F377DC03E4E3D4491B08613A1AB;
 struct EntryU5BU5D_tE4476329A8896E9AF7CD5F188BA18BB60DA5A776;
 struct EntryU5BU5D_t0A42BA59BEE3529B46D3541A1658D1C1CC51F4E0;
 struct EntryU5BU5D_t63544CF1BCA641D72D02FE665F35808C1E065C73;
-struct EntryU5BU5D_t5915235511461C3B2283E9DC503083CFE2C66F12;
 struct KeyValuePair_2U5BU5D_tC4614E25E0A118B0429816AF72AAF4D46D6B53DE;
 struct CharU5BU5D_t799905CF001DD5F13F7DBB310181FC4D8B7D0AAB;
 struct DictionaryEntryU5BU5D_t410156653E754D17B5E1161CC6CF565103B63533;
@@ -161,6 +161,19 @@ struct ConditionalWeakTable_2_t381B9D0186C0FCC3F83C0696C28C5001468A7858  : publi
 	EphemeronU5BU5D_t4F80428A1142C3102C946127F8190063001742E8* ___data;
 	RuntimeObject* ____lock;
 	int32_t ___size;
+};
+struct Dictionary_2_tB2C0D6D89BC6051781E25B740E20C3FA83061D41  : public RuntimeObject
+{
+	Int32U5BU5D_t19C97395396A72ECAF310612F0760F165060314C* ____buckets;
+	EntryU5BU5D_tBFE8C09AE2C2846A8B9D3105ABA9CB3BBD1D32DD* ____entries;
+	int32_t ____count;
+	int32_t ____freeList;
+	int32_t ____freeCount;
+	int32_t ____version;
+	RuntimeObject* ____comparer;
+	KeyCollection_t4A0B3AEB6AA6B370B5E594F12D681EACE1A5A5AE* ____keys;
+	ValueCollection_tCF9DCD993430A6A46FFA2E771FD05B49317CDD22* ____values;
+	RuntimeObject* ____syncRoot;
 };
 struct Dictionary_2_t8AEFD7BB6A4D5900C6C13BF9125F54DF0CE56F06  : public RuntimeObject
 {
@@ -225,19 +238,6 @@ struct Dictionary_2_t5A8B00D570E26BD509AD71D98A981295F73D3519  : public RuntimeO
 	RuntimeObject* ____comparer;
 	KeyCollection_t67341799E060B64E4AB3B36F954A1CCA0DC617D4* ____keys;
 	ValueCollection_tA3165AE1429C3FBD78FDA7BD14AC905D778EE4E1* ____values;
-	RuntimeObject* ____syncRoot;
-};
-struct Dictionary_2_t1BAD35846DCE35FA95A4BAEA2489549538FB234E  : public RuntimeObject
-{
-	Int32U5BU5D_t19C97395396A72ECAF310612F0760F165060314C* ____buckets;
-	EntryU5BU5D_t5915235511461C3B2283E9DC503083CFE2C66F12* ____entries;
-	int32_t ____count;
-	int32_t ____freeList;
-	int32_t ____freeCount;
-	int32_t ____version;
-	RuntimeObject* ____comparer;
-	KeyCollection_t28D77C19D61EEDA8A160D77FB05BD496F5C30415* ____keys;
-	ValueCollection_tC0CB8B0B026113F559ACAF272159E9C5265E28EE* ____values;
 	RuntimeObject* ____syncRoot;
 };
 struct EqualityComparer_1_t3C13803378C6BD5E42B6166B2605A13D5D50F9AE  : public RuntimeObject
@@ -852,6 +852,69 @@ IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR void ThrowHelper_ThrowWrongKeyTypeArgumentExc
 IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR bool Dictionary_2_ContainsKey_m82C8017E26FEE38C7D857E60B9AF37B0D06F6030 (Dictionary_2_tC782D5B1A0F339FE3FC8E55B54A3450883AEEBFF* __this, Guid_t ___0_key, const RuntimeMethod* method) ;
 IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR EqualityComparer_1_tAAD1A76C30594C4D736E586B3D77281A53A27399* EqualityComparer_1_CreateComparer_mD3D60BAB4A1E7DF8FDC8779F5A1A3104CAD5202A (const RuntimeMethod* method) ;
 IL2CPP_EXTERN_C IL2CPP_METHOD_ATTR EqualityComparer_1_t3C13803378C6BD5E42B6166B2605A13D5D50F9AE* EqualityComparer_1_CreateComparer_m515321F2D9E7A038480BC4EB53A91F131A7C0B52 (const RuntimeMethod* method) ;
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winvalid-offsetof"
+#pragma clang diagnostic ignored "-Wunused-variable"
+#endif
+// Method Definition Index: 11610
+// Method Definition Index: 11611
+// Method Definition Index: 11612
+// Method Definition Index: 11613
+// Method Definition Index: 11614
+// Method Definition Index: 11615
+// Method Definition Index: 11616
+// Method Definition Index: 11617
+// Method Definition Index: 11618
+// Method Definition Index: 11619
+// Method Definition Index: 11620
+// Method Definition Index: 11621
+// Method Definition Index: 11622
+// Method Definition Index: 11623
+// Method Definition Index: 11624
+// Method Definition Index: 11625
+// Method Definition Index: 11626
+// Method Definition Index: 11627
+// Method Definition Index: 11628
+// Method Definition Index: 11629
+// Method Definition Index: 11630
+// Method Definition Index: 11631
+// Method Definition Index: 11632
+// Method Definition Index: 11633
+// Method Definition Index: 11634
+// Method Definition Index: 11635
+// Method Definition Index: 11636
+// Method Definition Index: 11637
+// Method Definition Index: 11638
+// Method Definition Index: 11639
+// Method Definition Index: 11640
+// Method Definition Index: 11641
+// Method Definition Index: 11642
+// Method Definition Index: 11643
+// Method Definition Index: 11644
+// Method Definition Index: 11645
+// Method Definition Index: 11646
+// Method Definition Index: 11647
+// Method Definition Index: 11648
+// Method Definition Index: 11649
+// Method Definition Index: 11650
+// Method Definition Index: 11651
+// Method Definition Index: 11652
+// Method Definition Index: 11653
+// Method Definition Index: 11654
+// Method Definition Index: 11655
+// Method Definition Index: 11656
+// Method Definition Index: 11657
+// Method Definition Index: 11658
+// Method Definition Index: 11659
+// Method Definition Index: 11660
+// Method Definition Index: 11661
+// Method Definition Index: 11662
+// Method Definition Index: 11663
+// Method Definition Index: 11664
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Winvalid-offsetof"
@@ -4257,69 +4320,6 @@ IL_0015:
 		return;
 	}
 }
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Winvalid-offsetof"
-#pragma clang diagnostic ignored "-Wunused-variable"
-#endif
-// Method Definition Index: 11610
-// Method Definition Index: 11611
-// Method Definition Index: 11612
-// Method Definition Index: 11613
-// Method Definition Index: 11614
-// Method Definition Index: 11615
-// Method Definition Index: 11616
-// Method Definition Index: 11617
-// Method Definition Index: 11618
-// Method Definition Index: 11619
-// Method Definition Index: 11620
-// Method Definition Index: 11621
-// Method Definition Index: 11622
-// Method Definition Index: 11623
-// Method Definition Index: 11624
-// Method Definition Index: 11625
-// Method Definition Index: 11626
-// Method Definition Index: 11627
-// Method Definition Index: 11628
-// Method Definition Index: 11629
-// Method Definition Index: 11630
-// Method Definition Index: 11631
-// Method Definition Index: 11632
-// Method Definition Index: 11633
-// Method Definition Index: 11634
-// Method Definition Index: 11635
-// Method Definition Index: 11636
-// Method Definition Index: 11637
-// Method Definition Index: 11638
-// Method Definition Index: 11639
-// Method Definition Index: 11640
-// Method Definition Index: 11641
-// Method Definition Index: 11642
-// Method Definition Index: 11643
-// Method Definition Index: 11644
-// Method Definition Index: 11645
-// Method Definition Index: 11646
-// Method Definition Index: 11647
-// Method Definition Index: 11648
-// Method Definition Index: 11649
-// Method Definition Index: 11650
-// Method Definition Index: 11651
-// Method Definition Index: 11652
-// Method Definition Index: 11653
-// Method Definition Index: 11654
-// Method Definition Index: 11655
-// Method Definition Index: 11656
-// Method Definition Index: 11657
-// Method Definition Index: 11658
-// Method Definition Index: 11659
-// Method Definition Index: 11660
-// Method Definition Index: 11661
-// Method Definition Index: 11662
-// Method Definition Index: 11663
-// Method Definition Index: 11664
 #ifdef __clang__
 #pragma clang diagnostic pop
 #endif

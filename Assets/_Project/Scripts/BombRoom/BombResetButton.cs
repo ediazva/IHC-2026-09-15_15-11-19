@@ -1,6 +1,7 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using Oculus.Interaction;
 
 /// <summary>
 /// Botón de reinicio "R": reinicia la bomba al seleccionarlo (interacción XR)
@@ -12,18 +13,21 @@ public class BombResetButton : MonoBehaviour
     [Tooltip("Bomba a reiniciar. Se asigna por el constructor de la escena.")]
     public BombManager bomb;
 
-    private XRSimpleInteractable interactable;
+    private PokeInteractable interactable;
+    private Action<InteractableStateChangeArgs> handler;
 
     private void Awake()
     {
-        interactable = GetComponent<XRSimpleInteractable>();
-        if (interactable == null) interactable = GetComponentInParent<XRSimpleInteractable>();
+        interactable = GetComponent<PokeInteractable>();
+        if (interactable == null) interactable = GetComponentInParent<PokeInteractable>();
     }
 
     private void Start()
     {
+        if (interactable == null)
+            interactable = Isdk.Poke(gameObject, Vector3.up);
         if (interactable != null)
-            interactable.selectEntered.AddListener(_ => Restart());
+            handler = Isdk.Bind(interactable, Restart, null, handler);
     }
 
     private void Update()

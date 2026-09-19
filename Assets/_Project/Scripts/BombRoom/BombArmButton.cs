@@ -1,6 +1,6 @@
 using System;
 using UnityEngine;
-using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using Oculus.Interaction;
 
 /// <summary>
 /// Botón de activación en la cara de la bomba. Mientras hay módulos sin
@@ -16,7 +16,8 @@ public class BombArmButton : MonoBehaviour
     /// <summary>Se invoca si el jugador pulsa el botón antes de tiempo.</summary>
     public event Action OnPressedDenied;
 
-    private XRSimpleInteractable interactable;
+    private PokeInteractable interactable;
+    private Action<InteractableStateChangeArgs> handler;
     private Renderer buttonRenderer;
     private Material mat;
     private bool subscribed;
@@ -26,8 +27,8 @@ public class BombArmButton : MonoBehaviour
 
     private void Awake()
     {
-        interactable = GetComponent<XRSimpleInteractable>();
-        if (interactable == null) interactable = GetComponentInParent<XRSimpleInteractable>();
+        interactable = GetComponent<PokeInteractable>();
+        if (interactable == null) interactable = GetComponentInParent<PokeInteractable>();
     }
 
     private void Start()
@@ -39,8 +40,10 @@ public class BombArmButton : MonoBehaviour
             buttonRenderer.sharedMaterial = mat;
         }
 
+        if (interactable == null)
+            interactable = Isdk.Poke(gameObject, Vector3.up);
         if (interactable != null)
-            interactable.selectEntered.AddListener(_ => OnPressed());
+            handler = Isdk.Bind(interactable, OnPressed, null, handler);
 
         if (bomb != null)
         {
@@ -107,7 +110,7 @@ public class BombArmButton : MonoBehaviour
     {
         if (subscribed && bomb != null)
             bomb.OnReset -= OnBombReset;
-        if (interactable != null)
-            interactable.selectEntered.RemoveListener(_ => OnPressed());
+        if (interactable != null && handler != null)
+            interactable.WhenStateChanged -= handler;
     }
 }

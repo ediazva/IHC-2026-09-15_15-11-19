@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.XR.Interaction.Toolkit;
-using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using Oculus.Interaction;
+using Oculus.Interaction.HandGrab;
 
 /// <summary>
 /// Módulo de cables estilo "Among Us": en la cara frontal del cubo hay 3 cables
@@ -23,16 +23,16 @@ public class CablesModule : ModuleBase
     /// <summary>Medidas del puzzle, en metros, en espacio local del cubo.</summary>
     public static class Layout
     {
-        public const float LeftX = -0.34f;   // salida del cable en la pared izquierda
-        public const float MidX = -0.14f;    // posición de reposo del mango (stub)
-        public const float RightX = 0.30f;   // tomas de la derecha (sockets)
-        public const float PlaneZ = 0.315f;  // cara frontal del cubo (+Z)
-        public const float Row0Y = 0.10f;
-        public const float RowSpacing = 0.15f;
-        public const float PlugRadius = 0.045f;
-        public const float SocketSize = 0.095f;
-        public const float CordRadius = 0.013f;
-        public const float SnapDistance = 0.14f;
+        public const float LeftX = -0.24f;   // salida del cable en la pared izquierda de la cara frontal
+        public const float MidX = -0.08f;    // posición de reposo del mango (stub)
+        public const float RightX = 0.22f;   // tomas de la derecha (sockets)
+        public const float PlaneZ = 0.215f;  // cara frontal del cubo (+Z, cuerpo 0.4 de fondo)
+        public const float Row0Y = 0.09f;
+        public const float RowSpacing = 0.11f;
+        public const float PlugRadius = 0.04f;
+        public const float SocketSize = 0.09f;
+        public const float CordRadius = 0.012f;
+        public const float SnapDistance = 0.24f;
     }
 
     /// <summary>Colores del puzzle: rojo, azul y amarillo.</summary>
@@ -56,7 +56,10 @@ public class CablesModule : ModuleBase
 
         [NonSerialized] public Vector3 homeLocalPos;
         [NonSerialized] public Quaternion homeLocalRot;
-        [NonSerialized] public XRGrabInteractable grab;
+        [NonSerialized] public GrabInteractable grab;
+        [NonSerialized] public HandGrabInteractable handGrab;
+        [NonSerialized] public Action<InteractableStateChangeArgs> grabHandler;
+        [NonSerialized] public Action<InteractableStateChangeArgs> handGrabHandler;
         [NonSerialized] public Material plugMaterial;
         [NonSerialized] public Material stubMaterial;
         public Material material => plugMaterial;
@@ -122,9 +125,9 @@ public class CablesModule : ModuleBase
             cable.plug.transform.SetParent(cable.stub.transform, true);
         }
 
-        // Limpiar rigidbodies o interactables previos en plug para evitar conflictos
-        var oldGrab = cable.plug.GetComponent<XRGrabInteractable>();
-        if (oldGrab != null) Destroy(oldGrab);
+        // Limpiar interactables/rigidbodies previos (agrre previo, XRI, resets) en plug.
+        var isdkOld = cable.stub.GetComponent<GrabInteractable>();
+        if (isdkOld != null) Destroy(isdkOld);
         var oldRb = cable.plug.GetComponent<Rigidbody>();
         if (oldRb != null) Destroy(oldRb);
 
@@ -178,28 +181,24 @@ public class CablesModule : ModuleBase
         rb.isKinematic = true;
         rb.useGravity = false;
 
-        // XRGrabInteractable en stub que incluye ambos colliders (stub y plug)
-        XRGrabInteractable grab = cable.grab != null
-            ? cable.grab
-            : cable.stub.GetComponent<XRGrabInteractable>();
-        if (grab == null) grab = cable.stub.AddComponent<XRGrabInteractable>();
+        // GrabInteractable (ISDK) en stub: admite todos los colliders del rigidbody
+        // (mango + clavija) y los detecta automáticamente al arrancar.
+        cable.grab = Isdk.Grab(cable.stub, rb);
 
-        grab.useDynamicAttach = true;
-        grab.trackPosition = true;
-        grab.trackRotation = true;
-        grab.throwOnDetach = false;
-        grab.movementType = XRBaseInteractable.MovementType.Instantaneous;
+        // HandGrabInteractable: hace que el mango se agarre con la MANO DESNUDA
+        // en el Quest (sin mando). Sin HandGrabPose, ISDK usa la superficie del
+        // collider como punto de agarre.
+        cable.handGrab = Isdk.HandGrab(cable.stub, rb);
 
-        grab.colliders.Clear();
-        grab.colliders.Add(stubCol);
-        grab.colliders.Add(plugCol);
-
-        cable.grab = grab;
         CableState captured = cable;
-        grab.selectEntered.RemoveAllListeners();
-        grab.selectExited.RemoveAllListeners();
-        grab.selectEntered.AddListener(_ => OnPlugGrabbed(captured));
-        grab.selectExited.AddListener(_ => OnPlugReleased(captured));
+        cable.grabHandler = Isdk.Bind(cable.grab,
+            () => OnPlugGrabbed(captured),
+            () => OnPlugReleased(captured),
+            cable.grabHandler);
+        cable.handGrabHandler = Isdk.Bind(cable.handGrab,
+            () => OnPlugGrabbed(captured),
+            () => OnPlugReleased(captured),
+            cable.handGrabHandler);
     }
 
     // ------------------------------------------------------------------ Construcción dinámica
@@ -258,14 +257,14 @@ public class CablesModule : ModuleBase
         stub.transform.SetParent(parent, false);
         stub.transform.localPosition = new Vector3(Layout.MidX, y, Layout.PlaneZ);
         stub.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
-        stub.transform.localScale = new Vector3(0.035f, 0.045f, 0.035f);
+        stub.transform.localScale = new Vector3(0.05f, 0.06f, 0.05f);
         stub.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color);
 
         CapsuleCollider stubCol = stub.GetComponent<CapsuleCollider>();
         if (stubCol == null) stubCol = stub.AddComponent<CapsuleCollider>();
         stubCol.direction = 1;
-        stubCol.radius = 0.5f;
-        stubCol.height = 2f;
+        stubCol.radius = 0.6f;
+        stubCol.height = 2.2f;
 
         // 3. Clavija de contacto (esfera unida al mango en el extremo derecho)
         GameObject plug = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -273,7 +272,7 @@ public class CablesModule : ModuleBase
         plug.transform.SetParent(stub.transform, false);
         plug.transform.localPosition = new Vector3(0f, 1.0f, 0f);
         plug.transform.localRotation = Quaternion.identity;
-        plug.transform.localScale = new Vector3(0.07f / 0.035f, 0.07f / 0.045f, 0.07f / 0.035f);
+        plug.transform.localScale = new Vector3(0.07f / 0.05f, 0.07f / 0.06f, 0.07f / 0.05f);
         plug.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color);
 
         SphereCollider plugCol = plug.GetComponent<SphereCollider>();
@@ -386,6 +385,7 @@ public class CablesModule : ModuleBase
         connectedCount++;
 
         if (cable.grab != null) cable.grab.enabled = false;
+        if (cable.handGrab != null) cable.handGrab.enabled = false;
 
         // Orientar horizontalmente hacia la toma
         cable.stub.transform.localRotation = cable.homeLocalRot;

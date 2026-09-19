@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Oculus.Interaction;
 
 public enum BombState
 {
@@ -46,6 +48,26 @@ public class BombManager : MonoBehaviour
 
     private void Start()
     {
+        // Asegurar el agarre real ISDK de la bomba (Grabbable + transformador):
+        // la bomba debe poder cogerse y moverse con las manos.
+        Rigidbody rb = GetComponent<Rigidbody>();
+        if (rb != null) Isdk.Grab(gameObject, rb);
+
+        // Agarre con la MANO DESNUDA (HandGrabInteractable): va en el hijo "Body"
+        // para que sus colliders candidatos sean solo los del cuerpo (los que
+        // cuelgan del Rigidbody raíz lo harían desde todos los hijos) y así no
+        // robe el agarre de los mangos de los cables.
+        if (rb != null && transform.Find("Body") is Transform body && body.TryGetComponent<Collider>(out _))
+        {
+            Isdk.HandGrab(body.gameObject, rb);
+        }
+
+        // IMPORTANTE: acotar el agarre de la bomba SOLO al cuerpo. Si no,
+        // sus colliders heredados (mangos de cables, botones de Simón...) se
+        // registran como candidatos del grab de la bomba y le "roban" el
+        // agarre a los cables al haber empate en puntuación.
+        StartCoroutine(ScopeBombGrabRoutine());
+
         // Los módulos pueden crearse en tiempo de ejecución, así que se
         // vuelven a buscar aquí (ya con toda la jerarquía construida).
         modules.Clear();
@@ -152,6 +174,28 @@ public class BombManager : MonoBehaviour
     {
         State = newState;
         OnStateChanged?.Invoke(newState);
+    }
+
+    /// <summary>
+    /// Reaplica la acotación del grab de la bomba al collider del cuerpo durante
+    /// unos frames: el <see cref="GrabInteractable"/> recalcula su lista de
+    /// colliders en su propio Start (orden no determinista), así que la
+    /// sobreescribimos hasta que esté bien fijada.
+    /// </summary>
+    private IEnumerator ScopeBombGrabRoutine()
+    {
+        GrabInteractable grab = GetComponent<GrabInteractable>();
+        Transform body = transform.Find("Body");
+        if (grab == null || body == null) yield break;
+
+        Collider col = body.GetComponent<Collider>();
+        if (col == null) yield break;
+
+        for (int i = 0; i < 10; i++)
+        {
+            Isdk.ScopeGrabColliders(grab, col);
+            yield return null;
+        }
     }
 
     private void OnDestroy()

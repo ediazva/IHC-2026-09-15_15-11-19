@@ -2,8 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.XR.Interaction.Toolkit;
-using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using Oculus.Interaction;
 
 /// <summary>
 /// Módulo "Simón": rejilla 3x3 de botones de color en la cara IZQUIERDA del cubo.
@@ -22,11 +21,11 @@ public class SimonModule : ModuleBase
     /// <summary>Medidas en metros, en espacio local del cubo (cara izquierda).</summary>
     public static class Layout
     {
-        public const float FaceX = -0.472f;   // cara izquierda del cubo (-X)
-        public const float PanelX = -0.452f;
+        public const float FaceX = -0.30f;    // cara izquierda del cubo (-X, cuerpo 0.6 de ancho)
+        public const float PanelX = -0.284f;
         public const int GridSize = 3;        // rejilla 3x3
-        public const float Spacing = 0.12f;   // separación entre centros
-        public const float ButtonSize = 0.13f;
+        public const float Spacing = 0.105f;  // separación entre centros
+        public const float ButtonSize = 0.12f;
     }
 
     /// <summary>
@@ -69,6 +68,7 @@ public class SimonModule : ModuleBase
         [NonSerialized] public Renderer renderer;
         [NonSerialized] public Material material;
         [NonSerialized] public float litUntil;
+        [NonSerialized] public Action<InteractableStateChangeArgs> handler;
     }
 
     [Header("Configuración")]
@@ -94,6 +94,7 @@ public class SimonModule : ModuleBase
     private Coroutine playbackRoutine;
     private BombManager bomb;
     private bool startPressed;
+    private Action<InteractableStateChangeArgs> startHandler;
 
     public int SequenceLength => sequence.Count;
     public int Progress => inputIndex;
@@ -186,17 +187,26 @@ public class SimonModule : ModuleBase
             button.gameObject.SetActive(true);
 
             int index = i;
-            XRSimpleInteractable interactable = button.gameObject.GetComponent<XRSimpleInteractable>();
-            if (interactable == null) interactable = button.gameObject.AddComponent<XRSimpleInteractable>();
-            interactable.selectEntered.AddListener(_ => OnButtonPressed(index));
+            Vector3 outDir = OutwardOf(button.gameObject);
+            PokeInteractable poke = Isdk.Poke(button.gameObject, outDir);
+            button.handler = Isdk.Bind(poke, () => OnButtonPressed(index), null, button.handler);
         }
 
         if (startButton != null && startButton.gameObject != null)
         {
-            XRSimpleInteractable interactable = startButton.GetComponent<XRSimpleInteractable>();
-            if (interactable == null) interactable = startButton.AddComponent<XRSimpleInteractable>();
-            interactable.selectEntered.AddListener(_ => OnStartPressed());
+            Vector3 outDir = OutwardOf(startButton.gameObject);
+            PokeInteractable poke = Isdk.Poke(startButton.gameObject, outDir);
+            startHandler = Isdk.Bind(poke, OnStartPressed, null, startHandler);
         }
+    }
+
+    /// <summary>Dirección (local del botón) desde la que llega el dedo: hacia fuera de la bomba.</summary>
+    private Vector3 OutwardOf(GameObject go)
+    {
+        Vector3 center = bomb != null ? bomb.transform.position : transform.position;
+        Vector3 worldOut = go.transform.position - center;
+        if (worldOut.sqrMagnitude < 0.0001f) worldOut = new Vector3(-1f, 0f, 0f);
+        return go.transform.InverseTransformDirection(worldOut).normalized;
     }
 
     /// <summary>El jugador pulsa START para hacer sonar/ver la secuencia.</summary>

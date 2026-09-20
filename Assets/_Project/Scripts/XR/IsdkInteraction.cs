@@ -171,6 +171,24 @@ public static class Isdk
         if (field != null) field.SetValue(grab, colliders);
     }
 
+    /// <summary>
+    /// Acota los colliders que <see cref="HandGrabInteractable"/> usa para el
+    /// agarre con la MANO DESNUDA (candidatura y pose). La propiedad
+    /// <c>Colliders</c> se rellena en el Start del SDK con TODOS los colliders
+    /// bajo el Rigidbody: si el laberinto se regenera en runtime y destruye sus
+    /// colliders, esa lista queda con referencias caducas y el HandGrabInteractor
+    /// revienta con NullReferenceException CADA FRAME. Se ajusta por reflexión
+    /// y debe reaplicarse siempre que cambien los colliders de la bomba.
+    /// </summary>
+    public static void ScopeHandGrabColliders(HandGrabInteractable handGrab, params Collider[] colliders)
+    {
+        if (handGrab == null || colliders == null) return;
+        FieldInfo field = typeof(HandGrabInteractable).GetField(
+            "<Colliders>k__BackingField",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+        if (field != null) field.SetValue(handGrab, colliders);
+    }
+
     /// <summary>Igual que <see cref="Bind(PokeInteractable,...)"/> pero para agarres.</summary>
     public static Action<InteractableStateChangeArgs> Bind(
         GrabInteractable interactable,

@@ -43,6 +43,8 @@ Características implementadas:
 - **Sistema de strikes** (3 errores ⇒ explosión).
 - **Módulo de Cables** (conectar conector con la toma de su color).
 - **Módulo Simón** (repetir una secuencia de luces, por rondas).
+- **Módulo Laberinto** (cara derecha `+X`): laberinto de canicas físico que se
+  resuelve **inclinando todo el cubo**; se regenera distinto en cada partida.
 - **HUD** en mundo con tiempo, estado, errores y feedback.
 - **Audio 100 % procedural** (generado por código, sin ficheros de audio).
 - Soporte para **manos (hand tracking)** y para probar **sin visor** con el
@@ -119,6 +121,7 @@ El **XR Interaction Simulator** y el **Meta XR Simulator** no deben convivir
 | Mover el cubo | **Pellizca** (pulgar + índice) o **cierra la mano** sobre el cuerpo |
 | Conectar un cable | Agarra el **mango** de color y suéltalo sobre la **toma** de su color |
 | Jugar al Simón | Pulsa **START** (cara izquierda) y luego repite la secuencia en la rejilla 3×3 |
+| Jugar al Laberinto | Resuelve primero **Simón** (regala la bolita), introdúcela por el hueco *AQUÍ INTRODUCE LA BOLITA* (cara `+X`) y **inclina el cubo** para llevarla al hueco del *FINAL* |
 | Desarmar la bomba | Cuando todo esté resuelto, pulsa el **botón rojo** de la cara superior |
 | Reiniciar partida | Botón **R** de la escena o tecla **`R`** |
 
@@ -248,7 +251,37 @@ Parámetros en `CablesModule.Layout` (ver tabla en *Parámetros configurables*).
 - Fallo ⇒ **strike** y se repite la ronda.
 - Completar todas las rondas ⇒ `Solve()`.
 
-### Cara derecha `+X` — **HUD**
+### Cara derecha `+X` — **LABERINTO** (canicas, inclinar el cubo)
+
+Laberinto de canicas tipo juguete de madera, **incrustado en la cara derecha**
+(`Layout.FaceOffsetX = +0.306`). Se juega **agarrando e inclinando todo el cubo**:
+la bolita rueda por el tablero.
+
+- **Generación**: cada inicio de partida (y cada `ResetModule`) regenera un
+  laberinto `N×N` **distinto** (semilla aleatoria; actíva `useFixedSeed` para
+  fijar una) con el generador propio `MazeSpiralGenerator` (backtracking
+  recursivo / DFS, siempre resoluble).
+  - Paredes con `BoxCollider`, sin `Rigidbody`: el peso físico lo da la bolita.
+- **Bolita**: la regala **Simón** al resolverse (campo `ballSource`). Aparece
+  agarrable en el platito del hueco de entrada (`MazeSlotDish`), etiquetado
+  **`AQUÍ INTRODUCE LA BOLITA`**. Se agarra con la mano o el mando
+  (`Isdk.Grab` + `Isdk.HandGrab`).
+- **Meta / trampas**: la meta es la **celda más lejana** por BFS (siempre
+  resoluble) y hay **1–2 celdas trampa** intermedias. Ambas son cazoletas
+  huecas detrás de la lámina:
+  - Bolita en el **hueco FINAL** (`MazeGoalDish`, verde) ⇒ `Solve()`.
+  - Bolita en una **trampa** (`MazeHoleDish`, roja) ⇒ `AddStrike()` y vuelve a
+    la celda inicial.
+- **Extras**: embudo y guías visuales hacia el hueco, físicas de rodadura
+  (fricción alta, sin rebote), `Rigidbody.CollisionDetectionMode.Continuous`.
+- La bolita se crea **inactiva** hasta que Simón se resuelve
+  (`OnSolved → GrantBall`).
+
+> El generador del asset importado **MazeGen (Goldor)** se revisó y se descartó:
+> no genera colliders (solo prefabs decorativos) y los prefabs demo no vinieron.
+> El generador propio evita cualquier dependencia de assets.
+
+### HUD (flotante sobre el cubo)
 
 - Canvas en mundo con:
   - **Tiempo** restante (verde → ámbar ≤ 30 s → rojo ≤ 10 s, con parpadeo).
@@ -276,6 +309,7 @@ Todos bajo el menú superior **`Bomba VR`**:
 | `Crear escena BombRoom (para Quest / OpenXR / ISDK)` | Crea la escena completa con cosas para Quest | `BombRoomSetup.cs` |
 | `Construir sala en la escena actual` | Añade sala+bomba a la escena abierta | `BombRoomSetup.cs` |
 | `Añadir módulo Simón a la bomba actual` | Crea el módulo Simón (rejilla 3×3 + START) | `BombRoomSetup.cs` |
+| `Añadir módulo Laberinto (cara +X, bolita desde Simón)` | Crea `MazeModuleHolder` en la cara derecha, asigna `ballSource = Simón` y añade las etiquetas `Goal` y `Hole` | `MazeModuleSetup.cs` |
 | `Reconstruir bomba (cubo pequeño, texto fuera, agarre con manos)` | **Regenera la mesa y toda la bomba** con los valores de `CablesModule.Layout`, `SimonModule.Layout` y `BuildBomb()` (útil tras cambiar parámetros) | `BombRoomSetup.cs` |
 | `Fix ▶ Habilitar emisión de materiales VR (_EMISSION)` | Activa el keyword de emisión en todos los materiales | `BombRoomSetup.cs` |
 | `Enfocar la vista Scene en la sala` | Encuadra la sala en la ventana Scene | `BombRoomSetup.cs` |
@@ -315,6 +349,23 @@ del cubo**.
 | `Step Gap` | 0.15 s | Pausa entre luces |
 | `Start Delay` | 1.00 s | Espera tras pulsar START |
 | `Round Pause` | 0.70 s | Pausa entre rondas |
+
+### Módulo Laberinto (`MazeModuleHolder` → Inspector)
+
+| Campo | Valor | Descripción |
+|---|---|---|
+| `gridSize` | 5 | Laberinto `N×N` celdas (5 ≈ tablero de 15 cm) |
+| `cellSize` | 0.030 m | Tamaño de cada celda |
+| `wallThickness` | 0.008 m | Grosor de las paredes |
+| `wallHeight` | 0.050 m | Altura de las paredes sobre la lámina |
+| `ballRadius` | 0.0065 m | Radio de la bolita |
+| `useFixedSeed` | off | Fija la semilla para depurar/dificultad |
+| `fixedSeed` | 42 | Semilla usada con `useFixedSeed` |
+| `ballSource` | Module_Simon | Módulo que regala la bolita al resolverse |
+
+Medidas físicas del módulo en `MazeModule.Layout` (constantes de código):
+`FaceOffsetX 0.306`, `BackX 0.004`, `SheetX 0.012` (lámina de rodadura),
+`DishX 0.009` (cazoletas meta/trampa), `SlotDishY 0.012` (platito de recepción).
 
 ---
 
@@ -420,7 +471,8 @@ Otros ajustes relevantes:
 Assets/
 ├─ _Project/
 │  ├─ Editor/
-│  │  └─ BombRoomSetup.cs          # Menús "Bomba VR" + constructores de escena
+│  │  ├─ BombRoomSetup.cs          # Menús "Bomba VR" + constructores de escena
+│  │  ├─ MazeModuleSetup.cs        # Menú "Añadir módulo Laberinto" + tags Goal/Hole
 │  ├─ Materials/BombRoom/          # Materiales URP (assets generados)
 │  ├─ Scenes/BombRoom.unity        # Escena principal del prototipo
 │  └─ Scripts/
@@ -439,7 +491,10 @@ Assets/
 │        ├─ ModuleBase.cs
 │        ├─ BombRoomPalette.cs
 │        ├─ CablesModule.cs
-│        └─ SimonModule.cs
+│        ├─ SimonModule.cs
+│        ├─ MazeModule.cs          # Módulo Laberinto (cara +X)
+│        ├─ MazeGenerator.cs       # MazeSpiralGenerator: DFS/backtracker + BFS
+│        └─ MazeBallListener.cs    # Reenvío de disparos de la bolita al módulo
 ├─ Samples/…                       # Rig XR y simulador (XR Interaction Toolkit)
 ├─ XR/                             # Loaders y ajustes de OpenXR / XR Simulation
 └─ Tables and Chairs/              # Prefab de la mesa
@@ -453,6 +508,7 @@ Assets/
 - [ ] Pulir el **sonido** del Simón y del resto de interacciones.
 - [ ] Arreglar definitivamente el **runtime OpenXR** para visor real.
 - [ ] Módulo de **corte de cables** (ya existe `CuttingTool.cs` como base).
+- [x] Módulo **Laberinto** de canicas (cara `+X`, regenerado en cada partida).
 - [ ] Más módulos (memoria, código de colores, interruptores…).
 - [ ] Dificultad dinámica y modos de juego (tiempos/rondas).
 - [ ] Efectos finales (humo, vibración háptica, marcador).

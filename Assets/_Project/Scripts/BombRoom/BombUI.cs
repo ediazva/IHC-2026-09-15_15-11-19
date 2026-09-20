@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using Oculus.Interaction;
+using Oculus.Interaction.HandGrab;
 
 /// <summary>
 /// HUD en mundo de la bomba: cuenta regresiva, LED de errores (strikes),
@@ -28,6 +30,15 @@ public class BombUI : MonoBehaviour
     private readonly List<CablesModule> cables = new List<CablesModule>();
     private readonly List<SimonModule> simon = new List<SimonModule>();
     private readonly List<BombArmButton> armButtons = new List<BombArmButton>();
+    private readonly List<MazeModule> mazes = new List<MazeModule>();
+
+    // Emisión del cuerpo del cubo cuando se ROZA o se AGARRA: feedback visual
+    // de que la mano está haciendo contacto (hover = azul, select = verde).
+    private HandGrabInteractable bodyHandGrab;
+    private GrabInteractable bombGrab;
+    private InteractableState hgState = InteractableState.Normal;
+    private InteractableState gState = InteractableState.Normal;
+    private bool flashActive;
 
     private readonly List<Material> ledMats = new List<Material>();
     private Color bombBaseEmission;
@@ -56,6 +67,21 @@ public class BombUI : MonoBehaviour
         armButtons.Clear();
         armButtons.AddRange(FindObjectsByType<BombArmButton>());
 
+        mazes.Clear();
+        mazes.AddRange(FindObjectsByType<MazeModule>());
+
+        // Interactables del cubo para el feedback de contacto (emisión al tocar/agarrar).
+        bodyHandGrab = null;
+        bombGrab = null;
+        if (bomb != null)
+        {
+            Transform body = bomb.transform.Find("Body");
+            if (body != null) bodyHandGrab = body.GetComponent<HandGrabInteractable>();
+            bombGrab = bomb.GetComponent<GrabInteractable>();
+        }
+        hgState = InteractableState.Normal;
+        gState = InteractableState.Normal;
+
         // Instancias propias de los materiales para no ensuciar los assets.
         ledMats.Clear();
         if (strikeLeds != null)
@@ -77,6 +103,8 @@ public class BombUI : MonoBehaviour
             bombBodyRenderer.sharedMaterial = new Material(bombBodyRenderer.sharedMaterial);
             bombBaseEmission = Color.black;
         }
+
+        NormalizeHudScale();
 
         Subscribe();
 
@@ -117,6 +145,13 @@ public class BombUI : MonoBehaviour
             if (b == null) continue;
             b.OnPressedDenied += OnArmDenied;
         }
+        foreach (var m in mazes)
+        {
+            if (m == null) continue;
+            m.OnBallGranted += OnBallGrantedHint;
+        }
+        if (bodyHandGrab != null) bodyHandGrab.WhenStateChanged += OnHandGrabStateChanged;
+        if (bombGrab != null) bombGrab.WhenStateChanged += OnGrabStateChanged;
     }
 
     private void Unsubscribe()
@@ -146,6 +181,13 @@ public class BombUI : MonoBehaviour
             if (b == null) continue;
             b.OnPressedDenied -= OnArmDenied;
         }
+        foreach (var m in mazes)
+        {
+            if (m == null) continue;
+            m.OnBallGranted -= OnBallGrantedHint;
+        }
+        if (bodyHandGrab != null) bodyHandGrab.WhenStateChanged -= OnHandGrabStateChanged;
+        if (bombGrab != null) bombGrab.WhenStateChanged -= OnGrabStateChanged;
     }
 
     private void OnDestroy()
@@ -241,6 +283,7 @@ public class BombUI : MonoBehaviour
 
     private IEnumerator StrikeFlash()
     {
+        flashActive = true;
         float t = 0f;
         while (t < 0.35f)
         {
@@ -249,7 +292,49 @@ public class BombUI : MonoBehaviour
             bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", new Color(1f, 0.2f, 0.05f) * e);
             yield return null;
         }
-        bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", bombBaseEmission);
+        flashActive = false;
+        UpdateBodyHighlight();
+    }
+
+    // ------------------------------------------------------------------ Contacto (emisión del cubo)
+
+    private void OnHandGrabStateChanged(InteractableStateChangeArgs args)
+    {
+        hgState = args.NewState;
+        UpdateBodyHighlight();
+    }
+
+    private void OnGrabStateChanged(InteractableStateChangeArgs args)
+    {
+        gState = args.NewState;
+        UpdateBodyHighlight();
+    }
+
+    /// <summary>
+    /// Enciende la emisión del cuerpo del cubo según el contacto: rozado (hover)
+    /// azul suave, agarrado (select) verde intenso. Se salta mientras parpadea
+    /// el flash de strike para no pisarlo.
+    /// </summary>
+    private void UpdateBodyHighlight()
+    {
+        if (bombBodyRenderer == null || flashActive) return;
+        if (bomb != null && bomb.State != BombState.Running)
+        {
+            bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", bombBaseEmission);
+            return;
+        }
+
+        bool select = hgState == InteractableState.Select || gState == InteractableState.Select;
+        bool hover = !select
+                     && (hgState == InteractableState.Hover || gState == InteractableState.Hover);
+
+        Color emission;
+        if (select) emission = new Color(0.3f, 1f, 0.45f) * 1.4f;
+        else if (hover) emission = new Color(0.35f, 0.75f, 1f) * 0.6f;
+        else emission = bombBaseEmission;
+
+        bombBodyRenderer.sharedMaterial.EnableKeyword("_EMISSION");
+        bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", emission);
     }
 
     private void UpdateLeds()
@@ -308,6 +393,15 @@ public class BombUI : MonoBehaviour
         RefreshStatus();
     }
 
+    // ------------------------------------------------------------------ Bolita
+
+    private void OnBallGrantedHint()
+    {
+        ShowFeedback("¡SIMÓN OK! LA BOLITA CAYÓ EN EL LABERINTO → CARA +X, BOCA SUPERIOR",
+            new Color(0.4f, 0.85f, 1f), 6f);
+        RefreshStatus();
+    }
+
     private void RefreshStatus()
     {
         if (bomb != null) UpdateStatus(bomb.State);
@@ -322,21 +416,23 @@ public class BombUI : MonoBehaviour
     {
         UpdateLeds();
         timeText.text = FormatSeconds(timer != null ? timer.RemainingSeconds : 0);
-        if (bombBodyRenderer != null)
-            bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", Color.black);
+        flashActive = false;
+        hgState = InteractableState.Normal;
+        gState = InteractableState.Normal;
+        UpdateBodyHighlight();
         StopAllCoroutines();
         ShowFeedback("", Color.white);
     }
 
     // ------------------------------------------------------------------ Feedback
 
-    private void ShowFeedback(string msg, Color color)
+    private void ShowFeedback(string msg, Color color, float duration = 2f)
     {
         feedbackText.text = msg;
         feedbackText.color = color;
         if (feedbackRoutine != null) StopCoroutine(feedbackRoutine);
         if (string.IsNullOrEmpty(msg)) return;
-        feedbackRoutine = StartCoroutine(ClearFeedbackAfter(2f));
+        feedbackRoutine = StartCoroutine(ClearFeedbackAfter(duration));
     }
 
     private IEnumerator ClearFeedbackAfter(float seconds)
@@ -436,14 +532,30 @@ public class BombUI : MonoBehaviour
 
     // ------------------------------------------------------------------ Util
 
-    private void Update()
+    /// <summary>
+    /// Escala el canvas del HUD para que el reloj tenga ~18 cm de alto sea
+    /// cual sea el tamaño de los rects autorados en el editor: así el contador
+    /// se lee bien flotando sobre la bomba.
+    /// </summary>
+    private void NormalizeHudScale()
     {
-        // El panel está "pegado" a una cara del cubo pero siempre gira para
-        // quedar de frente a la cámara: el texto nunca se ve volteado.
+        Transform canvas = transform.Find("BombHUDCanvas");
+        if (canvas == null || timeText == null || timeText.rectTransform == null) return;
+        float h = timeText.rectTransform.rect.height;
+        float scale = 0.18f / Mathf.Max(0.001f, h);
+        canvas.localScale = new Vector3(scale, scale, scale);
+    }
+
+    private void LateUpdate()
+    {
+        // HUD flotante: siempre por ENCIMA de la bomba (arriba del mundo, NO gira
+        // con el cubo al inclinarlo) y orientado de cara al jugador. Así el
+        // contador se ve desde cualquier lado mientras giras el cubo.
         Transform billboard = transform.Find("BombHUDCanvas");
         Camera cam = Camera.main;
-        if (billboard != null && cam != null)
+        if (billboard != null && cam != null && bomb != null)
         {
+            billboard.position = bomb.transform.position + Vector3.up * 0.60f;
             Vector3 toCanvas = billboard.position - cam.transform.position;
             if (toCanvas.sqrMagnitude > 0.0001f)
                 billboard.rotation = Quaternion.LookRotation(toCanvas, cam.transform.up);

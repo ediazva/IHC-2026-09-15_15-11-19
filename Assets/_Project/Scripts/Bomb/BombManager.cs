@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Oculus.Interaction;
+using Oculus.Interaction.HandGrab;
 
 public enum BombState
 {
@@ -61,6 +62,19 @@ public class BombManager : MonoBehaviour
         {
             Isdk.HandGrab(body.gameObject, rb);
         }
+
+        // Esfera de PROXIMIDAD de agarre alrededor del cubo: al ser trigger, no
+        // toca la física, pero garantiza que el registro de candidatos del
+        // near-grab (solapamiento físico con la mano) se active aunque la mano
+        // no llegue a rozar la caja del Body. La pose de agarre la siguen dando
+        // los colliders reales del cuerpo (BuildGrabCandidates).
+        AddBodyGrabProximity();
+
+        // El near-grab de ISDK detecta candidatos por COLISIONES físicas: el
+        // HandGrabInteractor necesita colliders bajo su Rigidbody. El rig
+        // comprehensive no los trae (por eso agarrar el cubo de cerca no
+        // funcionaba); se inyectan aquí en la pinza y la empuñadura de cada mano.
+        EnableNearGrabHands();
 
         // IMPORTANTE: acotar el agarre de la bomba SOLO al cuerpo. Si no,
         // sus colliders heredados (mangos de cables, botones de Simón...) se
@@ -185,17 +199,115 @@ public class BombManager : MonoBehaviour
     private IEnumerator ScopeBombGrabRoutine()
     {
         GrabInteractable grab = GetComponent<GrabInteractable>();
-        Transform body = transform.Find("Body");
-        if (grab == null || body == null) yield break;
+        HandGrabInteractable handGrab = transform.Find("Body")?.GetComponent<HandGrabInteractable>();
+        if (grab == null || handGrab == null) yield break;
 
-        Collider col = body.GetComponent<Collider>();
-        if (col == null) yield break;
+        Collider[] candidates = BuildGrabCandidates();
+        if (candidates == null || candidates.Length == 0) yield break;
 
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 20; i++)
         {
-            Isdk.ScopeGrabColliders(grab, col);
+            Isdk.ScopeGrabColliders(grab, candidates);
+            Isdk.ScopeHandGrabColliders(handGrab, candidates);
             yield return null;
         }
+    }
+
+    /// <summary>Reaplica la acotación del agarre (tras rebuild del laberinto).</summary>
+    public void ReapplyGrabScope()
+    {
+        GrabInteractable grab = GetComponent<GrabInteractable>();
+        HandGrabInteractable handGrab = transform.Find("Body")?.GetComponent<HandGrabInteractable>();
+        if (grab == null || handGrab == null) return;
+        StartCoroutine(ScopeBombGrabRoutine());
+    }
+
+    /// <summary>
+    /// Colliders que el agarre del cubo reclama EN EXCLUSIVA: el cuerpo y las
+    /// piezas estructurales del laberinto (BoxCollider no-trigger). Cualquier
+    /// otro collider (mangos de cables, botones de Simón, la bolita, las
+    /// cazoletas trigger) queda fuera: así cada puzzle tiene sus propios
+    /// candidatos, no hay empates y agarrar un cable nunca rota el cubo.
+    /// </summary>
+    private Collider[] BuildGrabCandidates()
+    {
+        List<Collider> list = new List<Collider>();
+
+        Transform body = transform.Find("Body");
+        if (body != null)
+        {
+            Collider col = body.GetComponent<Collider>();
+            if (col != null) list.Add(col);
+        }
+
+        MazeModule maze = GetComponentInChildren<MazeModule>(true);
+        if (maze != null)
+        {
+            BoxCollider[] boxes = maze.GetComponentsInChildren<BoxCollider>(true);
+            for (int i = 0; i < boxes.Length; i++)
+            {
+                if (boxes[i] == null || boxes[i].isTrigger) continue;
+                list.Add(boxes[i]);
+            }
+        }
+
+        return list.ToArray();
+    }
+
+    /// <summary>
+    /// Esfera trigger centrada en el cubo (misma localización que el Body) que
+    /// amplía el área de DETECCIÓN del agarre de cerca sin distorsionar la pose
+    /// de agarre (esa la dan BuildGrabCandidates, que NO la incluye). Como es
+    /// trigger no afecta a la física de la bolita ni de los módulos, pero hace
+    /// que el CollisionInteractionRegistry vea a la mano como "dentro" del cubo
+    /// en cuanto esta se acerca a unos centímetros.
+    /// </summary>
+    private void AddBodyGrabProximity()
+    {
+        if (transform.Find("Body") == null) return;
+        if (transform.Find("BodyGrabProximity") != null) return;
+
+        GameObject prox = new GameObject("BodyGrabProximity");
+        prox.transform.SetParent(transform, false); // raíz a escala 1: radio en metros
+        SphereCollider sphere = prox.AddComponent<SphereCollider>();
+        sphere.isTrigger = true;
+        sphere.radius = 0.46f; // media diagonal del body (~0.41) + margen de pinza
+    }
+
+    /// <summary>
+    /// El near-grab de las manos desnudas lista candidatos SOLO por solapamiento
+    /// físico entre los colliders del Rigidbody del interactor y los del
+    /// interactable (CollisionInteractionRegistry). El rig "Hand and No
+    /// Controller" no da colliders a los nodos HandGrabInteractor/Rigidbody, así
+    /// que la bomba nunca se registra como candidata y agarrada de cerca no hay
+    /// forma. Se añaden aquí sendas esferas trigger en la PINZA y la EMPUÑADURA
+    /// (los nodos GripPoint/PinchPoint) de cada interfaz de agarre de mano.
+    /// </summary>
+    private void EnableNearGrabHands()
+    {
+        HandGrabInteractor[] interactors = FindObjectsByType<HandGrabInteractor>(FindObjectsSortMode.None);
+        for (int i = 0; i < interactors.Length; i++)
+        {
+            HandGrabInteractor inter = interactors[i];
+            if (inter == null || inter.GetType() != typeof(HandGrabInteractor)) continue;
+            AddNearGrabVolume(inter, "GripPoint");
+            AddNearGrabVolume(inter, "PinchPoint");
+        }
+    }
+
+    private static void AddNearGrabVolume(HandGrabInteractor inter, string childName)
+    {
+        Rigidbody rb = inter.Rigidbody;
+        if (rb == null) return;
+        if (rb.GetComponentsInChildren<Collider>(true).Length > 0) return;
+
+        Transform host = rb.transform.Find(childName);
+        if (host == null) host = rb.transform;
+
+        SphereCollider sphere = host.gameObject.GetComponent<SphereCollider>();
+        if (sphere == null) sphere = host.gameObject.AddComponent<SphereCollider>();
+        sphere.isTrigger = true;
+        sphere.radius = childName == "PinchPoint" ? 0.045f : 0.05f;
     }
 
     private void OnDestroy()

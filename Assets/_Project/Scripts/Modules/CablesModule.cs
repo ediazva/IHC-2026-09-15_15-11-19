@@ -150,6 +150,11 @@ public class CablesModule : ModuleBase
         }
         plugCol.enabled = true;
 
+        // Mango más grande para que el agarre con la MANO DESNUDA (pinch/palm)
+        // sea fiable: el collider y la clavija escalan con la escala del mango.
+        cable.stub.transform.localScale = Vector3.Scale(
+            cable.stub.transform.localScale, new Vector3(1.4f, 1.4f, 1.4f));
+
         // Guardar posición y rotación inicial del conjunto agarrable (stub)
         cable.homeLocalPos = cable.stub.transform.localPosition;
         cable.homeLocalRot = cable.stub.transform.localRotation;

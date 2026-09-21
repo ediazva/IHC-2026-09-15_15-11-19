@@ -357,11 +357,16 @@ public static class BombRoomSetup
         hudGo.transform.localPosition = new Vector3(0f, 0.40f, 0.03f);
         hudGo.transform.localRotation = Quaternion.identity;
         BombUI hud = hudGo.AddComponent<BombUI>();
-        BuildHudCanvas(hud);
+        // Asignar referencias necesarias (los HUDs se crean en runtime en BombUI.Start)
         hud.bomb = manager;
         hud.strikeLeds = leds;
         hud.bombBodyRenderer = bodyCube.GetComponent<Renderer>();
         hud.bombBodyColor = new Color(0.09f, 0.09f, 0.11f);
+
+        // Referencia al prefab de explosión fuego (Mirza Beig)
+        var explosionPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Mirza Beig/Cinematic Explosions FREE/Prefabs/Explosions/Explosion FREE 1 Variant.prefab");
+        if (explosionPrefab != null) hud.explosionFirePrefab = explosionPrefab;
+        else Debug.LogWarning("[BombRoomSetup] Explosion fire prefab no encontrado en Assets/Mirza Beig/Cinematic Explosions FREE/Prefabs/Explosions/Explosion FREE 1 Variant.prefab");
 
         // --- Botón de activación en la Cara Superior (se enciende al terminar).
         BuildArmButton(bomb.transform, manager, buttonMat);
@@ -530,8 +535,10 @@ public static class BombRoomSetup
         labelGo.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
         Canvas canvas = labelGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
-        TextMeshProUGUI text = CreateText(labelGo.transform, "StartText", new Vector2(0f, 0f), new Vector2(160f, 80f), 55f, Color.white);
-        text.text = "START";
+        TextMeshProUGUI text = CreateText(labelGo.transform, "StartText", new Vector2(0f, 0f), new Vector2(200f, 100f), 36f, Color.white);
+        text.text = "INICIAR";
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.overflowMode = TextOverflowModes.Overflow;
 
         var so = new SerializedObject(module);
         SerializedProperty arr = so.FindProperty("buttons");
@@ -550,43 +557,41 @@ public static class BombRoomSetup
     private static void BuildHudCanvas(BombUI hud)
     {
         // Placa oscura detrás del HUD para que el texto se lea bien en el aire.
+        // Los HUDs (controller + cube) se crean en runtime en BombUI.Start()
         Cube(hud.transform, "HudPlate", new Vector3(0f, 0f, -0.02f),
             new Vector3(0.66f, 0.30f, 0.01f), GetMaterial("Mat_Panel", new Color(0.03f, 0.033f, 0.04f)));
-
-        GameObject canvasGo = new GameObject("BombHUDCanvas");
-        canvasGo.transform.SetParent(hud.transform, false);
-        canvasGo.transform.localPosition = new Vector3(0f, 0f, 0f);
-        canvasGo.transform.localRotation = Quaternion.identity;
-        canvasGo.transform.localScale = new Vector3(0.0025f, 0.0025f, 0.0025f);
-
-        Canvas canvas = canvasGo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-
-        hud.timeText = CreateText(canvasGo.transform, "TimeText", new Vector2(0, 26), new Vector2(260, 90), 130, new Color(0.35f, 1f, 0.4f));
-        hud.statusText = CreateText(canvasGo.transform, "StatusText", new Vector2(0, -44), new Vector2(300, 60), 56, Color.white);
-        hud.feedbackText = CreateText(canvasGo.transform, "FeedbackText", new Vector2(0, -96), new Vector2(300, 50), 44, Color.white);
     }
 
     private static void BuildResetButton(GameObject root, float tableTop)
     {
         Material buttonMat = GetMaterial("Mat_BotonReset", new Color(0.12f, 0.7f, 0.35f));
 
-        GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        // Cilindro vertical (botón redondo tipo emergencia)
+        GameObject button = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         button.name = "ResetButton";
         button.transform.SetParent(root.transform, false);
         button.transform.position = new Vector3(-0.5f, tableTop + 0.03f, 0.48f);
-        button.transform.localScale = new Vector3(0.16f, 0.05f, 0.16f);
+        button.transform.localScale = new Vector3(0.12f, 0.04f, 0.12f);
         button.GetComponent<Renderer>().sharedMaterial = buttonMat;
+
+        // Ajustar collider del cilindro
+        CapsuleCollider col = button.GetComponent<CapsuleCollider>();
+        if (col != null)
+        {
+            col.direction = 1; // Y-axis
+            col.radius = 0.5f;
+            col.height = 1f;
+        }
 
         Isdk.Poke(button, Vector3.up);
         BombResetButton resetBtn = button.AddComponent<BombResetButton>();
         resetBtn.bomb = Object.FindAnyObjectByType<BombManager>();
 
-        // Etiqueta "R".
+        // Etiqueta "RESET" en la cara superior
         GameObject label = new GameObject("Label", typeof(TextMeshProUGUI));
         label.transform.SetParent(button.transform, false);
-        label.transform.localPosition = new Vector3(0f, 0.12f, 0f);
-        label.transform.localRotation = Quaternion.identity;
+        label.transform.localPosition = new Vector3(0f, 0.025f, 0f); // Encima del cilindro
+        label.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // Mirando hacia arriba
         float comp = 0.002f;
         label.transform.localScale = new Vector3(
             comp / button.transform.localScale.x,
@@ -594,10 +599,14 @@ public static class BombRoomSetup
             1f);
 
         TextMeshProUGUI tmp = label.GetComponent<TextMeshProUGUI>();
-        tmp.text = "R";
-        tmp.fontSize = 60f;
+        tmp.text = "RESET";
+        tmp.fontSize = 50f;
         tmp.alignment = TextAlignmentOptions.Center;
         tmp.color = Color.white;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
+        tmp.overflowMode = TextOverflowModes.Overflow;
+        tmp.outlineWidth = 0.15f;
+        tmp.outlineColor = Color.black;
         if (TMP_Settings.defaultFontAsset != null)
             tmp.font = TMP_Settings.defaultFontAsset;
     }

@@ -38,7 +38,7 @@ public class MazeModule : ModuleBase
 
     [Header("Generación (cada partida cambia de forma, seed aleatoria)")]
     [Tooltip("Tamaño en celdas (NxN). 5 => laberinto de ~15 cm.")]
-    public int gridSize = 5;
+    public int gridSize = 10;
 
     [Tooltip("Tamaño de cada celda en metros.")]
     public float cellSize = 0.03f;

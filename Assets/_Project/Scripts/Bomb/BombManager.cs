@@ -285,7 +285,7 @@ public class BombManager : MonoBehaviour
     /// </summary>
     private void EnableNearGrabHands()
     {
-        HandGrabInteractor[] interactors = FindObjectsByType<HandGrabInteractor>(FindObjectsSortMode.None);
+        HandGrabInteractor[] interactors = FindObjectsByType<HandGrabInteractor>(FindObjectsInactive.Include);
         for (int i = 0; i < interactors.Length; i++)
         {
             HandGrabInteractor inter = interactors[i];

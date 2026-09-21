@@ -24,6 +24,9 @@ public class BombResetButton : MonoBehaviour
 
     private void Start()
     {
+        // Fallback: si no se asignó en inspector, buscar BombManager en la escena
+        if (bomb == null) bomb = FindAnyObjectByType<BombManager>();
+
         if (interactable == null)
             interactable = Isdk.Poke(gameObject, Vector3.up);
         if (interactable != null)

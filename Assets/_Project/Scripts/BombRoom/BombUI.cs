@@ -6,11 +6,11 @@ using Oculus.Interaction;
 using Oculus.Interaction.HandGrab;
 
 /// <summary>
-/// HUD en mundo de la bomba: cuenta regresiva, LED de errores (strikes),
-/// feedback de cortes, mensaje de estado y efectos de victoria/explosión.
-/// Los elementos (canvas, textos, LEDs, materiales) están construidos en el
-/// editor; en tiempo de ejecución solo se enganchan los eventos y se clonan
-/// los materiales para no tocar los assets.
+/// HUD dual de la bomba:
+///  - Controller HUD (principal): anclado a mano derecha, timer grande MM:SS, panel oscuro
+///  - Cube HUD (secundario): en cara superior del cubo, solo timer pequeño, gira con el cubo
+///  - Explosión cinemática usando prefab Mirza Beig
+///  - Feedback visual de strikes, contactos, estado
 /// </summary>
 public class BombUI : MonoBehaviour
 {
@@ -20,8 +20,12 @@ public class BombUI : MonoBehaviour
     public Renderer bombBodyRenderer;
     public Color bombBodyColor = new Color(0.09f, 0.09f, 0.11f);
 
-    [Header("Textos del HUD")]
-    public TextMeshProUGUI timeText;
+    [Header("Prefab explosión fuego (Mirza Beig)")]
+    public GameObject explosionFirePrefab;
+
+    [Header("Textos del HUD (se crean en runtime si no existen)")]
+    public TextMeshProUGUI controllerTimeText;
+    public TextMeshProUGUI cubeTimeText;
     public TextMeshProUGUI statusText;
     public TextMeshProUGUI feedbackText;
 
@@ -32,8 +36,7 @@ public class BombUI : MonoBehaviour
     private readonly List<BombArmButton> armButtons = new List<BombArmButton>();
     private readonly List<MazeModule> mazes = new List<MazeModule>();
 
-    // Emisión del cuerpo del cubo cuando se ROZA o se AGARRA: feedback visual
-    // de que la mano está haciendo contacto (hover = azul, select = verde).
+    // Emisión del cuerpo del cubo (hover/select)
     private HandGrabInteractable bodyHandGrab;
     private GrabInteractable bombGrab;
     private InteractableState hgState = InteractableState.Normal;
@@ -43,12 +46,16 @@ public class BombUI : MonoBehaviour
     private readonly List<Material> ledMats = new List<Material>();
     private Color bombBaseEmission;
 
+    // HUDs
+    private GameObject controllerHudGo;
+    private GameObject cubeHudGo;
+    private Canvas controllerCanvas;
+    private Canvas cubeCanvas;
     private Coroutine feedbackRoutine;
 
     private void Awake()
     {
         if (bomb == null) bomb = FindAnyObjectByType<BombManager>();
-        if (timeText == null || statusText == null || feedbackText == null) BuildCanvas();
     }
 
     private void Start()
@@ -70,7 +77,7 @@ public class BombUI : MonoBehaviour
         mazes.Clear();
         mazes.AddRange(FindObjectsByType<MazeModule>());
 
-        // Interactables del cubo para el feedback de contacto (emisión al tocar/agarrar).
+        // Interactables del cubo para feedback de contacto
         bodyHandGrab = null;
         bombGrab = null;
         if (bomb != null)
@@ -82,7 +89,7 @@ public class BombUI : MonoBehaviour
         hgState = InteractableState.Normal;
         gState = InteractableState.Normal;
 
-        // Instancias propias de los materiales para no ensuciar los assets.
+        // Materiales propios para LEDs y cuerpo
         ledMats.Clear();
         if (strikeLeds != null)
         {
@@ -104,7 +111,9 @@ public class BombUI : MonoBehaviour
             bombBaseEmission = Color.black;
         }
 
-        NormalizeHudScale();
+        // Construir HUDs duales
+        BuildControllerHUD();
+        BuildCubeHUD();
 
         Subscribe();
 
@@ -114,14 +123,8 @@ public class BombUI : MonoBehaviour
 
     private void Subscribe()
     {
-        if (timer != null)
-        {
-            timer.OnTimeChanged += OnTimeChanged;
-        }
-        if (strikes != null)
-        {
-            strikes.OnStrikeAdded += OnStrikeAdded;
-        }
+        if (timer != null) timer.OnTimeChanged += OnTimeChanged;
+        if (strikes != null) strikes.OnStrikeAdded += OnStrikeAdded;
         if (bomb != null)
         {
             bomb.OnStateChanged += UpdateStatus;
@@ -200,20 +203,38 @@ public class BombUI : MonoBehaviour
     private void OnTimeChanged(float timeLeft)
     {
         int rem = Mathf.CeilToInt(timeLeft);
-        timeText.text = FormatSeconds(rem);
+        string mmss = FormatTimeMMSS(rem);
 
-        if (rem <= 10) timeText.color = new Color(1f, 0.28f, 0.25f);
-        else if (rem <= 30) timeText.color = new Color(1f, 0.82f, 0.2f);
-        else timeText.color = new Color(0.35f, 1f, 0.4f);
+        if (controllerTimeText != null) controllerTimeText.text = mmss;
+        if (cubeTimeText != null) cubeTimeText.text = mmss;
 
-        if (bomb != null && bomb.State == BombState.Running && rem <= 20 && rem > 0)
+        Color timerColor;
+        if (rem <= 10) timerColor = new Color(1f, 0.28f, 0.25f);
+        else if (rem <= 30) timerColor = new Color(1f, 0.82f, 0.2f);
+        else timerColor = new Color(0.35f, 1f, 0.4f);
+
+        if (controllerTimeText != null) controllerTimeText.color = timerColor;
+        if (cubeTimeText != null) cubeTimeText.color = timerColor;
+
+        // Parpadeo <10s en ambos HUDs
+        if (bomb != null && bomb.State == BombState.Running && rem <= 10 && rem > 0)
             SFX.Play(SfxType.Tick, 0.3f);
+    }
+
+    private static string FormatTimeMMSS(int totalSeconds)
+    {
+        totalSeconds = Mathf.Max(0, totalSeconds);
+        int m = totalSeconds / 60;
+        int s = totalSeconds % 60;
+        return $"{m:00}:{s:00}";
     }
 
     // ------------------------------------------------------------------ Estado
 
     private void UpdateStatus(BombState state)
     {
+        if (statusText == null) return;
+
         switch (state)
         {
             case BombState.Idle:
@@ -226,19 +247,13 @@ public class BombUI : MonoBehaviour
                 if (cables.Count > 0)
                 {
                     int done = 0;
-                    foreach (var c in cables)
-                        if (c != null) done += c.ConnectedCount;
+                    foreach (var c in cables) if (c != null) done += c.ConnectedCount;
                     parts.Add($"cables {done}/3");
                 }
                 if (simon.Count > 0)
                 {
                     int done = 0, total = 0;
-                    foreach (var s in simon)
-                    {
-                        if (s == null) continue;
-                        done += s.RoundsCompleted;
-                        total += s.TotalRounds;
-                    }
+                    foreach (var s in simon) { if (s == null) continue; done += s.RoundsCompleted; total += s.TotalRounds; }
                     parts.Add($"simón {done}/{total}");
                 }
                 statusText.text = parts.Count > 0 ? "Resuelve: " + string.Join(" · ", parts) : "Resuelve los módulos";
@@ -310,11 +325,6 @@ public class BombUI : MonoBehaviour
         UpdateBodyHighlight();
     }
 
-    /// <summary>
-    /// Enciende la emisión del cuerpo del cubo según el contacto: rozado (hover)
-    /// azul suave, agarrado (select) verde intenso. Se salta mientras parpadea
-    /// el flash de strike para no pisarlo.
-    /// </summary>
     private void UpdateBodyHighlight()
     {
         if (bombBodyRenderer == null || flashActive) return;
@@ -325,8 +335,7 @@ public class BombUI : MonoBehaviour
         }
 
         bool select = hgState == InteractableState.Select || gState == InteractableState.Select;
-        bool hover = !select
-                     && (hgState == InteractableState.Hover || gState == InteractableState.Hover);
+        bool hover = !select && (hgState == InteractableState.Hover || gState == InteractableState.Hover);
 
         Color emission;
         if (select) emission = new Color(0.3f, 1f, 0.45f) * 1.4f;
@@ -397,8 +406,7 @@ public class BombUI : MonoBehaviour
 
     private void OnBallGrantedHint()
     {
-        ShowFeedback("¡SIMÓN OK! LA BOLITA CAYÓ EN EL LABERINTO → CARA +X, BOCA SUPERIOR",
-            new Color(0.4f, 0.85f, 1f), 6f);
+        ShowFeedback("¡SIMÓN OK! LA BOLITA CAYÓ EN EL LABERINTO → CARA +X, BOCA SUPERIOR", new Color(0.4f, 0.85f, 1f), 6f);
         RefreshStatus();
     }
 
@@ -415,7 +423,9 @@ public class BombUI : MonoBehaviour
     private void OnBombReset()
     {
         UpdateLeds();
-        timeText.text = FormatSeconds(timer != null ? timer.RemainingSeconds : 0);
+        string mmss = FormatTimeMMSS(timer != null ? Mathf.CeilToInt(timer.RemainingSeconds) : 0);
+        if (controllerTimeText != null) controllerTimeText.text = mmss;
+        if (cubeTimeText != null) cubeTimeText.text = mmss;
         flashActive = false;
         hgState = InteractableState.Normal;
         gState = InteractableState.Normal;
@@ -428,6 +438,7 @@ public class BombUI : MonoBehaviour
 
     private void ShowFeedback(string msg, Color color, float duration = 2f)
     {
+        if (feedbackText == null) return;
         feedbackText.text = msg;
         feedbackText.color = color;
         if (feedbackRoutine != null) StopCoroutine(feedbackRoutine);
@@ -438,18 +449,25 @@ public class BombUI : MonoBehaviour
     private IEnumerator ClearFeedbackAfter(float seconds)
     {
         yield return new WaitForSeconds(seconds);
-        feedbackText.text = "";
+        if (feedbackText != null) feedbackText.text = "";
     }
 
-    // ------------------------------------------------------------------ Explosión
+    // ------------------------------------------------------------------ Explosión Cinemática (Mirza Beig)
 
     private IEnumerator ExplosionFx()
     {
+        // 1. Instanciar prefab de explosión fuego
+        if (explosionFirePrefab != null && bomb != null)
+        {
+            GameObject explosion = Instantiate(explosionFirePrefab, bomb.transform.position, Quaternion.identity);
+            Destroy(explosion, 3f);
+        }
+
+        // 2. Pulso de escala + emisión en cuerpo de bomba (complemento)
         const float duration = 0.9f;
         float t = 0f;
-
-        // Pulso de escala de la bomba (impacto).
         Vector3 baseScale = bombBodyRenderer != null ? bombBodyRenderer.transform.localScale : Vector3.one;
+
         while (t < duration)
         {
             t += Time.deltaTime;
@@ -471,14 +489,13 @@ public class BombUI : MonoBehaviour
 
         SFX.Play(SfxType.Explosion, 1f);
 
+        // 3. Flash de luz puntual
         Light flash = new GameObject("BoomFlash").AddComponent<Light>();
         flash.type = LightType.Point;
         flash.color = new Color(1f, 0.55f, 0.12f);
         flash.range = 7f;
         flash.intensity = 8f;
-        flash.transform.position = bombBodyRenderer != null
-            ? bombBodyRenderer.transform.position
-            : transform.position;
+        flash.transform.position = bombBodyRenderer != null ? bombBodyRenderer.transform.position : transform.position;
 
         float f = 0f;
         while (f < 0.7f)
@@ -490,90 +507,156 @@ public class BombUI : MonoBehaviour
         Destroy(flash.gameObject);
     }
 
-    // ------------------------------------------------------------------ Canvas (respaldo)
+    // ------------------------------------------------------------------ HUD Dual Construction
 
-    private void BuildCanvas()
+    private void BuildControllerHUD()
     {
-        GameObject canvasGo = new GameObject("BombHUDCanvas");
-        canvasGo.transform.SetParent(transform, false);
-        canvasGo.transform.localPosition = new Vector3(0f, 0.02f, 0.05f);
-        canvasGo.transform.localRotation = Quaternion.identity;
-        canvasGo.transform.localScale = new Vector3(0.0032f, 0.0032f, 0.0032f);
+        // Buscar RightHandAnchor en la escena
+        Transform rightHand = FindRightHandAnchor();
+        if (rightHand == null)
+        {
+            Debug.LogWarning("[BombUI] RightHandAnchor no encontrado, HUD controlador no creado");
+            return;
+        }
 
-        Canvas canvas = canvasGo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
+        controllerHudGo = new GameObject("ControllerHUD");
+        controllerHudGo.transform.SetParent(rightHand, false);
+        controllerHudGo.transform.localPosition = new Vector3(0f, 0f, 0.08f); // Delante de la mano
+        controllerHudGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f); // Mirando al usuario
 
-        timeText = CreateText(canvasGo.transform, "TimeText", new Vector2(0, 40), new Vector2(300, 130), 160, Color.green);
-        statusText = CreateText(canvasGo.transform, "StatusText", new Vector2(0, -95), new Vector2(340, 60), 52, Color.white);
-        feedbackText = CreateText(canvasGo.transform, "FeedbackText", new Vector2(0, -175), new Vector2(360, 50), 48, Color.white);
+        controllerCanvas = controllerHudGo.AddComponent<Canvas>();
+        controllerCanvas.renderMode = RenderMode.WorldSpace;
+
+        // Panel fondo semitransparente oscuro
+        GameObject panel = new GameObject("Panel");
+        panel.transform.SetParent(controllerHudGo.transform, false);
+        RectTransform panelRect = panel.AddComponent<RectTransform>();
+        panelRect.anchorMin = panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(220, 120);
+        UnityEngine.UI.Image panelImg = panel.AddComponent<UnityEngine.UI.Image>();
+        panelImg.color = new Color(0.03f, 0.033f, 0.04f, 0.85f);
+        panelImg.raycastTarget = false;
+
+        // Timer grande centrado
+        GameObject timerGo = new GameObject("ControllerTimeText");
+        timerGo.transform.SetParent(controllerHudGo.transform, false);
+        RectTransform timerRect = timerGo.AddComponent<RectTransform>();
+        timerRect.anchorMin = timerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        timerRect.pivot = new Vector2(0.5f, 0.5f);
+        timerRect.anchoredPosition = Vector2.zero;
+        timerRect.sizeDelta = new Vector2(200, 100);
+
+        controllerTimeText = timerGo.AddComponent<TextMeshProUGUI>();
+        controllerTimeText.alignment = TextAlignmentOptions.Center;
+        controllerTimeText.fontSize = 90;
+        controllerTimeText.color = new Color(0.35f, 1f, 0.4f);
+        controllerTimeText.textWrappingMode = TextWrappingModes.NoWrap;
+        controllerTimeText.overflowMode = TextOverflowModes.Overflow;
+        controllerTimeText.outlineWidth = 0.15f;
+        controllerTimeText.outlineColor = Color.black;
+        if (TMP_Settings.defaultFontAsset != null) controllerTimeText.font = TMP_Settings.defaultFontAsset;
+
+        // Escalado: 1 unidad canvas = 1 metro, queremos ~5cm alto texto
+        controllerHudGo.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
     }
 
-    private static TextMeshProUGUI CreateText(Transform parent, string name, Vector2 position, Vector2 size, float fontSize, Color color)
+    private void BuildCubeHUD()
     {
-        GameObject go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
+        if (bomb == null) return;
 
-        RectTransform rt = (RectTransform)go.transform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = position;
-        rt.sizeDelta = size;
+        cubeHudGo = new GameObject("CubeHUD");
+        cubeHudGo.transform.SetParent(bomb.transform, false);
+        cubeHudGo.transform.localPosition = new Vector3(0f, 0.35f, 0f); // Cara superior
+        cubeHudGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // Mirando hacia arriba
 
-        TextMeshProUGUI text = go.AddComponent<TextMeshProUGUI>();
-        text.alignment = TextAlignmentOptions.Center;
-        text.fontSize = fontSize;
-        text.color = color;
-        text.overflowMode = TextOverflowModes.Overflow;
-        if (TMP_Settings.defaultFontAsset != null)
-            text.font = TMP_Settings.defaultFontAsset;
+        cubeCanvas = cubeHudGo.AddComponent<Canvas>();
+        cubeCanvas.renderMode = RenderMode.WorldSpace;
 
-        return text;
+        // Panel fondo pequeño
+        GameObject panel = new GameObject("Panel");
+        panel.transform.SetParent(cubeHudGo.transform, false);
+        RectTransform panelRect = panel.AddComponent<RectTransform>();
+        panelRect.anchorMin = panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = new Vector2(160, 70);
+        UnityEngine.UI.Image panelImg = panel.AddComponent<UnityEngine.UI.Image>();
+        panelImg.color = new Color(0.03f, 0.033f, 0.04f, 0.75f);
+        panelImg.raycastTarget = false;
+
+        // Timer pequeño
+        GameObject timerGo = new GameObject("CubeTimeText");
+        timerGo.transform.SetParent(cubeHudGo.transform, false);
+        RectTransform timerRect = timerGo.AddComponent<RectTransform>();
+        timerRect.anchorMin = timerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        timerRect.pivot = new Vector2(0.5f, 0.5f);
+        timerRect.anchoredPosition = Vector2.zero;
+        timerRect.sizeDelta = new Vector2(150, 60);
+
+        cubeTimeText = timerGo.AddComponent<TextMeshProUGUI>();
+        cubeTimeText.alignment = TextAlignmentOptions.Center;
+        cubeTimeText.fontSize = 50;
+        cubeTimeText.color = new Color(0.35f, 1f, 0.4f);
+        cubeTimeText.textWrappingMode = TextWrappingModes.NoWrap;
+        cubeTimeText.overflowMode = TextOverflowModes.Overflow;
+        cubeTimeText.outlineWidth = 0.12f;
+        cubeTimeText.outlineColor = Color.black;
+        if (TMP_Settings.defaultFontAsset != null) cubeTimeText.font = TMP_Settings.defaultFontAsset;
+
+        // Escala para ~2.5cm alto en mundo
+        cubeHudGo.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
     }
 
-    // ------------------------------------------------------------------ Util
-
-    /// <summary>
-    /// Escala el canvas del HUD para que el reloj tenga ~18 cm de alto sea
-    /// cual sea el tamaño de los rects autorados en el editor: así el contador
-    /// se lee bien flotando sobre la bomba.
-    /// </summary>
-    private void NormalizeHudScale()
+    private Transform FindRightHandAnchor()
     {
-        Transform canvas = transform.Find("BombHUDCanvas");
-        if (canvas == null || timeText == null || timeText.rectTransform == null) return;
-        float h = timeText.rectTransform.rect.height;
-        float scale = 0.18f / Mathf.Max(0.001f, h);
-        canvas.localScale = new Vector3(scale, scale, scale);
+        // Buscar en la escena el anchor de mano derecha
+        var anchors = Object.FindObjectsByType<Transform>(FindObjectsInactive.Include);
+        foreach (var t in anchors)
+        {
+            if (t.name.Contains("RightHand") || t.name.Contains("RightController") || t.name.Contains("RightHandAnchor"))
+                return t;
+        }
+        // Fallback: buscar en Camera.main hacia abajo
+        if (Camera.main != null)
+        {
+            var camAnchors = Camera.main.GetComponentsInChildren<Transform>(true);
+            foreach (var t in camAnchors)
+            {
+                if (t.name.Contains("RightHand") || t.name.Contains("RightController"))
+                    return t;
+            }
+        }
+        return null;
     }
 
     private void LateUpdate()
     {
-        // HUD flotante: siempre por ENCIMA de la bomba (arriba del mundo, NO gira
-        // con el cubo al inclinarlo) y orientado de cara al jugador. Así el
-        // contador se ve desde cualquier lado mientras giras el cubo.
-        Transform billboard = transform.Find("BombHUDCanvas");
-        Camera cam = Camera.main;
-        if (billboard != null && cam != null && bomb != null)
+        // Controller HUD: ya está anclado a la mano, no necesita billboard
+        // Solo asegurar que siga activo y visible
+        if (controllerHudGo != null && controllerHudGo.activeInHierarchy != (bomb != null && bomb.State != BombState.Exploded))
         {
-            billboard.position = bomb.transform.position + Vector3.up * 0.60f;
-            Vector3 toCanvas = billboard.position - cam.transform.position;
-            if (toCanvas.sqrMagnitude > 0.0001f)
-                billboard.rotation = Quaternion.LookRotation(toCanvas, cam.transform.up);
+            controllerHudGo.SetActive(bomb != null && bomb.State != BombState.Exploded);
         }
 
-        if (timer == null || bomb == null || timeText == null) return;
+        // Cube HUD: seguir cara superior del cubo (ya es child, pero asegurar posición)
+        if (cubeHudGo != null && bomb != null)
+        {
+            cubeHudGo.transform.position = bomb.transform.position + bomb.transform.up * 0.35f;
+            cubeHudGo.transform.rotation = Quaternion.LookRotation(bomb.transform.up, -bomb.transform.forward);
+        }
+
+        // Parpadeo timer <10s en AMBOS HUDs
+        if (timer == null || bomb == null) return;
         if (bomb.State == BombState.Running && timer.RemainingSeconds <= 10)
         {
-            timeText.alpha = Mathf.Sin(Time.timeSinceLevelLoad * 7f) > 0f ? 1f : 0.28f;
+            float alpha = Mathf.Sin(Time.timeSinceLevelLoad * 7f) > 0f ? 1f : 0.28f;
+            if (controllerTimeText != null) controllerTimeText.alpha = alpha;
+            if (cubeTimeText != null) cubeTimeText.alpha = alpha;
         }
         else
         {
-            timeText.alpha = 1f;
+            if (controllerTimeText != null) controllerTimeText.alpha = 1f;
+            if (cubeTimeText != null) cubeTimeText.alpha = 1f;
         }
-    }
-
-    private static string FormatSeconds(int seconds)
-    {
-        return Mathf.Max(0, seconds).ToString();
     }
 }

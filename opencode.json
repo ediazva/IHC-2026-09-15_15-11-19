@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "servers": {
+      "meta-xr-unity-runtime": {
+        "type": "remote",
+        "url": "http://127.0.0.1:48736/mcpbridge/",
+        "headers": {
+          "Authorization": "Bearer 14e62a2bef65434e9061a0d0d8e0fb7d"
+        }
+      }
+    }
+  }
+}

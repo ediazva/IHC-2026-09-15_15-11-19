@@ -5537,6 +5537,10 @@ PrefabInstance:
       propertyPath: m_LocalPosition.z
       value: -4.35
       objectReference: {fileID: 0}
+    - target: {fileID: -5869989567740756309, guid: e98726efce39d0d4291ee14cad71926b, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 9d22bf5833eded844a14d709e77dc80b, type: 2}
     - target: {fileID: -5169578811043067064, guid: e98726efce39d0d4291ee14cad71926b, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
@@ -5601,6 +5605,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: HeadquartersRoom
       objectReference: {fileID: 0}
+    - target: {fileID: 1153853828980129620, guid: e98726efce39d0d4291ee14cad71926b, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 8ba94a614ba5af34cb5854acab870a79, type: 2}
     - target: {fileID: 2276841198830500832, guid: e98726efce39d0d4291ee14cad71926b, type: 3}
       propertyPath: m_LocalPosition.x
       value: 1.1247768

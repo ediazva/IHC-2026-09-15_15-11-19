@@ -105,3 +105,92 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# =============================================================================
+# ADDITIONAL: Meta Quest / Horizon OS / VR Specific
+# =============================================================================
+
+# Meta Quest build artifacts
+*.apk
+*.aab
+*.obb
+*.apks
+
+# Android build artifacts (Quest builds)
+/[Bb]uilds/**/*.apk
+/[Bb]uilds/**/*.aab
+/[Bb]uilds/**/*.obb
+gradle.properties
+local.properties
+/Android/
+
+# Oculus/Meta platform specific
+/[Aa]ssets/Oculus/
+/[Aa]ssets/Meta.XR.*
+/[Aa]ssets/Plugins/Android/**/*.aar
+/[Aa]ssets/Plugins/Android/**/*.jar
+
+# Meta XR Interaction SDK / XR Hands generated files
+/[Aa]ssets/XR/
+/[Aa]ssets/Samples/
+
+# Quest development build logs
+*_development.log
+*_Development.log
+
+# =============================================================================
+# ADDITIONAL: IDE / Editor Specific
+# =============================================================================
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Visual Studio
+*.vcxproj*
+*.vcxproj.filters
+*.vcxproj.user
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =============================================================================
+# ADDITIONAL: Project Specific (Backup folders detected in your repo)
+# =============================================================================
+
+# Unity backup folders (pattern: *BackUpThisFolder_ButDontShipItWithYourGame)
+/*_BackUpThisFolder_ButDontShipItWithYourGame/
+
+# =============================================================================
+# ADDITIONAL: CI/CD & Package Manager
+# =============================================================================
+
+# Unity Package Manager cache
+/[Ll]ibrary/PackageCache/
+
+# Unity Accelerator cache
+/[Ll]ibrary/ArtifactDB
+/[Ll]ibrary/ShaderCache
+/[Ll]ibrary/BuildCache
+
+# =============================================================================
+# WHAT TO KEEP (do NOT ignore these)
+# =============================================================================
+# !/[Aa]ssets/**/*.meta
+# !/[Pp]ackages/**/*.meta
+# !/[Pp]rojectSettings/**/*.meta

@@ -7,14 +7,13 @@ namespace VRInteractionPrototype.Editor
 {
     /// <summary>
     /// Coloca automaticamente los modelos importados al cargar el Editor:
-    /// C4 sobre la mesa, lampara separada, cuarto en el origen.
+    /// Lampara separada y cuarto en el origen.
     /// Solo actua en escenas con objeto "Table" (BombRoom) y solo crea
     /// lo que falta. No borra ni mueve nada existente.
     /// </summary>
     [InitializeOnLoad]
     public static class AutoPlaceModels
     {
-        private const string C4Path = "Assets/_Project/Models/C4Bomb/C4_bomb.fbx";
         private const string LampBlendPath = "Assets/_Project/Models/TriangleLamp/triangle_lamp.blend";
         private const string LampFbxPath = "Assets/_Project/Models/TriangleLamp/triangle_lamp.fbx";
         private const string RoomPath = "Assets/_Project/Models/HeadquartersRoom/Headquarters_Room.fbx";
@@ -35,7 +34,6 @@ namespace VRInteractionPrototype.Editor
 
             bool changed = false;
             changed |= EnsureRoom();
-            changed |= EnsureC4OnTable(table);
             changed |= EnsureLampOnTable(table);
 
             if (changed)
@@ -55,24 +53,6 @@ namespace VRInteractionPrototype.Editor
             instance.name = "HeadquartersRoom";
             instance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
             Debug.Log("[AutoPlaceModels] HeadquartersRoom instanciado en el origen.");
-            return true;
-        }
-
-        private static bool EnsureC4OnTable(GameObject table)
-        {
-            if (GameObject.Find("C4Bomb") != null) return false;
-            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(C4Path);
-            if (asset == null) { Debug.LogWarning("[AutoPlaceModels] C4 no importado aun: " + C4Path); return false; }
-            Renderer top = GetTopRenderer(table);
-            if (top == null) return false;
-
-            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(asset);
-            instance.name = "C4Bomb";
-            Bounds b = GetWorldBounds(instance);
-            Vector3 target = new Vector3(top.bounds.center.x, top.bounds.max.y + b.extents.y + 0.001f, top.bounds.center.z);
-            instance.transform.position = target - (b.center - instance.transform.position);
-            instance.transform.SetParent(table.transform, true);
-            Debug.Log("[AutoPlaceModels] C4Bomb colocado sobre la mesa.");
             return true;
         }
 

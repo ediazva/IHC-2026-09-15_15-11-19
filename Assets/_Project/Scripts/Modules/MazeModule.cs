@@ -25,7 +25,7 @@ public class MazeModule : ModuleBase
     /// <summary>Medidas físicas del módulo (metros, en local del cubo).</summary>
     public static class Layout
     {
-        public const float FaceOffsetX = 0.306f;  // plano de la cara +X del cuerpo (0.6 de ancho)
+        public const float FaceOffsetX = 0.206f;  // plano de la cara +X del cuerpo (0.4 de ancho)
         public const float BackX = 0.004f;        // placa de cierre pegada a la cara del cubo
         public const float BackThickness = 0.004f;
         public const float SheetX = 0.012f;       // lámina donde rueda la bolita

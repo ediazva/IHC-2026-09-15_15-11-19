@@ -23,15 +23,15 @@ public class CablesModule : ModuleBase
     /// <summary>Medidas del puzzle, en metros, en espacio local del cubo.</summary>
     public static class Layout
     {
-        public const float LeftX = -0.24f;   // salida del cable en la pared izquierda de la cara frontal
-        public const float MidX = -0.08f;    // posición de reposo del mango (stub)
-        public const float RightX = 0.22f;   // tomas de la derecha (sockets)
+        public const float LeftX = -0.15f;   // salida del cable en la pared izquierda de la cara frontal
+        public const float MidX = -0.055f;   // posición de reposo del mango (stub)
+        public const float RightX = 0.145f;  // tomas de la derecha (sockets)
         public const float PlaneZ = 0.215f;  // cara frontal del cubo (+Z, cuerpo 0.4 de fondo)
-        public const float Row0Y = 0.09f;
-        public const float RowSpacing = 0.11f;
-        public const float PlugRadius = 0.04f;
-        public const float SocketSize = 0.09f;
-        public const float CordRadius = 0.012f;
+        public const float Row0Y = 0.08f;
+        public const float RowSpacing = 0.095f;
+        public const float PlugRadius = 0.034f;
+        public const float SocketSize = 0.074f;
+        public const float CordRadius = 0.009f;
         public const float SnapDistance = 0.24f;
     }
 
@@ -153,7 +153,7 @@ public class CablesModule : ModuleBase
         // Mango más grande para que el agarre con la MANO DESNUDA (pinch/palm)
         // sea fiable: el collider y la clavija escalan con la escala del mango.
         cable.stub.transform.localScale = Vector3.Scale(
-            cable.stub.transform.localScale, new Vector3(1.4f, 1.4f, 1.4f));
+            cable.stub.transform.localScale, new Vector3(1.15f, 1.15f, 1.15f));
 
         // Guardar posición y rotación inicial del conjunto agarrable (stub)
         cable.homeLocalPos = cable.stub.transform.localPosition;
@@ -262,7 +262,7 @@ public class CablesModule : ModuleBase
         stub.transform.SetParent(parent, false);
         stub.transform.localPosition = new Vector3(Layout.MidX, y, Layout.PlaneZ);
         stub.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
-        stub.transform.localScale = new Vector3(0.05f, 0.06f, 0.05f);
+        stub.transform.localScale = new Vector3(0.04f, 0.052f, 0.04f);
         stub.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color);
 
         CapsuleCollider stubCol = stub.GetComponent<CapsuleCollider>();
@@ -277,7 +277,7 @@ public class CablesModule : ModuleBase
         plug.transform.SetParent(stub.transform, false);
         plug.transform.localPosition = new Vector3(0f, 1.0f, 0f);
         plug.transform.localRotation = Quaternion.identity;
-        plug.transform.localScale = new Vector3(0.07f / 0.05f, 0.07f / 0.06f, 0.07f / 0.05f);
+        plug.transform.localScale = new Vector3(0.058f / 0.04f, 0.058f / 0.052f, 0.058f / 0.04f);
         plug.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color);
 
         SphereCollider plugCol = plug.GetComponent<SphereCollider>();

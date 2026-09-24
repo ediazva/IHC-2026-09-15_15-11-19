@@ -21,11 +21,11 @@ public class SimonModule : ModuleBase
     /// <summary>Medidas en metros, en espacio local del cubo (cara izquierda).</summary>
     public static class Layout
     {
-        public const float FaceX = -0.30f;    // cara izquierda del cubo (-X, cuerpo 0.6 de ancho)
-        public const float PanelX = -0.284f;
+        public const float FaceX = -0.20f;    // cara izquierda del cubo (-X, cuerpo 0.4 de ancho)
+        public const float PanelX = -0.184f;
         public const int GridSize = 3;        // rejilla 3x3
-        public const float Spacing = 0.105f;  // separación entre centros
-        public const float ButtonSize = 0.12f;
+        public const float Spacing = 0.072f;  // separación entre centros
+        public const float ButtonSize = 0.065f;
     }
 
     /// <summary>

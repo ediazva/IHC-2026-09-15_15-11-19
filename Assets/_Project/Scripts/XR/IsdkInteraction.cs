@@ -34,7 +34,6 @@ public static class Isdk
     public static PokeInteractable Poke(GameObject go, Vector3 pokeLocalDir)
     {
         PokeInteractable poke = go.GetComponent<PokeInteractable>();
-        if (poke != null) return poke;
 
         Vector2 area = PokeArea(go, pokeLocalDir);
 

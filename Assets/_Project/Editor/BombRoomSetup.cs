@@ -255,28 +255,18 @@ public static class BombRoomSetup
         GameObject table = new GameObject("Table");
         table.transform.SetParent(root.transform, false);
 
-        Material wood = GetMaterial("Mat_Madera", new Color(0.45f, 0.29f, 0.16f), metallic: 0f, smoothness: 0.35f);
-        Material leg = GetMaterial("Mat_Pata", new Color(0.22f, 0.22f, 0.24f));
-
-        // Mesa pequeña: tablero a ~0.74 m (cintura de una persona de 1.70 m).
-        Cube(table.transform, "Top", new Vector3(0f, 0.72f, 0f), new Vector3(1.05f, 0.04f, 0.72f), wood);
-
-        Vector3[] corners =
-        {
-            new Vector3(-0.48f, 0.36f, -0.31f),
-            new Vector3(0.48f, 0.36f, -0.31f),
-            new Vector3(-0.48f, 0.36f, 0.31f),
-            new Vector3(0.48f, 0.36f, 0.31f),
-        };
-        foreach (Vector3 corner in corners)
-            Cube(table.transform, "Leg", corner, new Vector3(0.05f, 0.70f, 0.05f), leg);
+        // Invisible placement anchor: the imported room already provides the
+        // visible table, so avoid generating a smaller duplicate inside it.
+        GameObject top = new GameObject("Top");
+        top.transform.SetParent(table.transform, false);
+        top.transform.localPosition = new Vector3(0f, 0.74f, 0f);
 
         return table;
     }
 
     private static void BuildBomb(GameObject root, TablePlacement table)
     {
-        const float bodyW = 0.6f, bodyH = 0.4f, bodyD = 0.4f;
+        const float bodyW = 0.4f, bodyH = 0.4f, bodyD = 0.4f;
         float bombCenterY = table.TopY + bodyH * 0.5f;
 
         Material body = GetMaterial("Mat_Bomba", new Color(0.09f, 0.09f, 0.11f));
@@ -310,7 +300,7 @@ public static class BombRoomSetup
 
         // Panel frontal (visual, sin collider): fondo del puzzle de cables.
         Cube(bomb.transform, "FrontPanel", new Vector3(0f, 0f, 0.196f),
-            new Vector3(0.52f, 0.34f, 0.01f), panel);
+            new Vector3(0.36f, 0.34f, 0.01f), panel);
 
         // --- Sistemas de juego
         TimerSystem timer = bomb.AddComponent<TimerSystem>();
@@ -542,7 +532,7 @@ public static class BombRoomSetup
             stub.transform.SetParent(cablesParent.transform, false);
             stub.transform.localPosition = new Vector3(CablesModule.Layout.MidX, y, CablesModule.Layout.PlaneZ);
             stub.transform.localRotation = Quaternion.Euler(0f, 0f, -90f);
-            stub.transform.localScale = new Vector3(0.05f, 0.06f, 0.05f);
+            stub.transform.localScale = new Vector3(0.04f, 0.052f, 0.04f);
             stub.GetComponent<Renderer>().sharedMaterial = cableMats[i];
 
             CapsuleCollider stubCol = stub.GetComponent<CapsuleCollider>();
@@ -557,7 +547,7 @@ public static class BombRoomSetup
             plug.transform.SetParent(stub.transform, false);
             plug.transform.localPosition = new Vector3(0f, 1.0f, 0f);
             plug.transform.localRotation = Quaternion.identity;
-            plug.transform.localScale = new Vector3(0.07f / 0.05f, 0.07f / 0.06f, 0.07f / 0.05f);
+            plug.transform.localScale = new Vector3(0.058f / 0.04f, 0.058f / 0.052f, 0.058f / 0.04f);
             plug.GetComponent<Renderer>().sharedMaterial = cableMats[i];
 
             SphereCollider plugCol = plug.GetComponent<SphereCollider>();
@@ -608,15 +598,15 @@ public static class BombRoomSetup
         int n = size * size;
 
         // Fondo de la cara izquierda (sin collider), con marco alrededor.
-        float panelW = spacing * size + 0.02f;
-        float panelH = 0.56f; // algo más alto para dejar hueco al botón START
+        float panelW = spacing * (size - 1) + SimonModule.Layout.ButtonSize + 0.04f;
+        float panelH = 0.34f; // cabe en la cara de 0.40 m dejando margen
         Cube(module.transform, "SimonPanel", new Vector3(SimonModule.Layout.PanelX, 0f, 0f),
             new Vector3(0.014f, panelH, panelW), panelMat);
 
         // Rejilla 3x3: centrada un poco arriba para dejar sitio al START debajo.
         GameObject[] gos = new GameObject[n];
         float half = (size - 1) * 0.5f * spacing;
-        float gridCenterY = 0.08f;
+        float gridCenterY = 0.055f;
         for (int row = 0; row < size; row++)
         {
             for (int col = 0; col < size; col++)
@@ -640,8 +630,8 @@ public static class BombRoomSetup
         GameObject startBtn = GameObject.CreatePrimitive(PrimitiveType.Cube);
         startBtn.name = "SimonStartButton";
         startBtn.transform.SetParent(module.transform, false);
-        startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.225f, 0f);
-        startBtn.transform.localScale = new Vector3(0.08f, 0.12f, 0.22f);
+        startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.14f, 0f);
+        startBtn.transform.localScale = new Vector3(0.055f, 0.055f, 0.16f);
         startBtn.GetComponent<Renderer>().sharedMaterial =
             GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.2f);
 
@@ -650,9 +640,9 @@ public static class BombRoomSetup
         // Etiqueta "START" (canvas world-space pequeño orientado hacia -X).
         GameObject labelGo = new GameObject("SimonStartLabel");
         labelGo.transform.SetParent(module.transform, false);
-        labelGo.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.225f, 0f);
+        labelGo.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.14f, 0f);
         labelGo.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
-        labelGo.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+        labelGo.transform.localScale = new Vector3(0.0007f, 0.0007f, 0.0007f);
         Canvas canvas = labelGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         TextMeshProUGUI text = CreateText(labelGo.transform, "StartText", new Vector2(0f, 0f), new Vector2(200f, 100f), 36f, Color.white);

@@ -117,6 +117,7 @@ public class BombUI : MonoBehaviour
 
         Subscribe();
 
+        OnTimeChanged(timer != null ? timer.TimeLeft : 0f);
         UpdateLeds();
         UpdateStatus(bomb != null ? bomb.State : BombState.Idle);
     }
@@ -592,6 +593,7 @@ public class BombUI : MonoBehaviour
         timerRect.pivot = new Vector2(0.5f, 0.5f);
         timerRect.anchoredPosition = Vector2.zero;
         timerRect.sizeDelta = new Vector2(150, 60);
+        timerRect.localScale = new Vector3(-1f, 1f, 1f);
 
         cubeTimeText = timerGo.AddComponent<TextMeshProUGUI>();
         cubeTimeText.alignment = TextAlignmentOptions.Center;

@@ -82,6 +82,8 @@ public class BombManager : MonoBehaviour
         // agarre a los cables al haber empate en puntuación.
         StartCoroutine(ScopeBombGrabRoutine());
 
+        EnsureDefaultMazeModule();
+
         // Los módulos pueden crearse en tiempo de ejecución, así que se
         // vuelven a buscar aquí (ya con toda la jerarquía construida).
         modules.Clear();
@@ -97,6 +99,18 @@ public class BombManager : MonoBehaviour
         if (timer != null) timer.OnTimeout += HandleTimeout;
 
         if (autoStart) Begin();
+    }
+
+    private void EnsureDefaultMazeModule()
+    {
+        if (GetComponentInChildren<MazeModule>(true) != null) return;
+
+        GameObject holder = new GameObject("MazeModuleHolder");
+        holder.transform.SetParent(transform, false);
+        holder.transform.localPosition = new Vector3(MazeModule.Layout.FaceOffsetX, 0f, 0f);
+
+        MazeModule maze = holder.AddComponent<MazeModule>();
+        maze.ballSource = GetComponentInChildren<SimonModule>(true);
     }
 
     public void Begin()

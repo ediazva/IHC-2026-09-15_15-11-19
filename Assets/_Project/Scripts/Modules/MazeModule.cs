@@ -79,6 +79,7 @@ public class MazeModule : ModuleBase
     private Renderer slotDishRenderer;
     private Renderer ballRenderer;
     private Transform ballBeacon;
+    private float ballPlaneLocalX;
 
     private void Awake()
     {
@@ -102,6 +103,11 @@ public class MazeModule : ModuleBase
         {
             GrantBall();
         }
+    }
+
+    private void FixedUpdate()
+    {
+        ConstrainBallToMazePlane();
     }
 
     public override void ResetModule()
@@ -182,6 +188,7 @@ public class MazeModule : ModuleBase
     private void PlaceBall(Vector3 localPos)
     {
         if (ballRb == null) return;
+        localPos.x = ballPlaneLocalX;
         ball.transform.localPosition = localPos;
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
@@ -197,6 +204,32 @@ public class MazeModule : ModuleBase
             ballRb.linearVelocity = Vector3.zero;
             ballRb.angularVelocity = Vector3.zero;
             ballRb.isKinematic = false;
+        }
+    }
+
+    private void ConstrainBallToMazePlane()
+    {
+        if (ball == null || ballRb == null || ballRb.isKinematic) return;
+
+        Vector3 localPos = transform.InverseTransformPoint(ball.position);
+        if (Mathf.Abs(localPos.x - ballPlaneLocalX) > 0.0001f)
+        {
+            localPos.x = ballPlaneLocalX;
+            ball.position = transform.TransformPoint(localPos);
+        }
+
+        Vector3 localVelocity = transform.InverseTransformDirection(ballRb.linearVelocity);
+        if (Mathf.Abs(localVelocity.x) > 0.0001f)
+        {
+            localVelocity.x = 0f;
+            ballRb.linearVelocity = transform.TransformDirection(localVelocity);
+        }
+
+        Vector3 localAngularVelocity = transform.InverseTransformDirection(ballRb.angularVelocity);
+        if (Mathf.Abs(localAngularVelocity.x) > 0.0001f)
+        {
+            localAngularVelocity.x = 0f;
+            ballRb.angularVelocity = transform.TransformDirection(localAngularVelocity);
         }
     }
 
@@ -452,6 +485,7 @@ public class MazeModule : ModuleBase
         rb.isKinematic = false;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
+        ballPlaneLocalX = startLocalPos.x;
 
         Isdk.Grab(ballGo, rb);
         Isdk.HandGrab(ballGo, rb);

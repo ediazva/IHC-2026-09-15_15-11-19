@@ -354,6 +354,13 @@ public static class BombRoomSetup
         SimonModule simon = simonGo.AddComponent<SimonModule>();
         BuildSimon(simon, simonMats, panel);
 
+        // --- Módulo Laberinto (cara derecha +X). La bolita aparece al resolver Simón.
+        GameObject mazeGo = new GameObject("MazeModuleHolder");
+        mazeGo.transform.SetParent(bomb.transform, false);
+        mazeGo.transform.localPosition = new Vector3(MazeModule.Layout.FaceOffsetX, 0f, 0f);
+        MazeModule maze = mazeGo.AddComponent<MazeModule>();
+        maze.ballSource = simon;
+
         // --- HUD: texto flotando en el aire, justo delante-encima del cubo,
         //     completamente fuera del cuerpo para que se lea sin quedar
         //     escondido dentro de la caja.

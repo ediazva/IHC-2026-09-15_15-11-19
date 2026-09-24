@@ -71,9 +71,10 @@ public static class BombRoomSetup
         EnsureLighting();
         EnsureGround(root);
 
-        float tableTop = BuildTable(root);
-        BuildBomb(root, tableTop);
-        BuildResetButton(root, tableTop);
+        Transform tableTop = BuildTable(root).transform.Find("Top");
+        TablePlacement table = GetTablePlacement(root, tableTop);
+        BuildBomb(root, table);
+        BuildResetButton(root, table.TopY);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("<color=#7CFC00>[Bomba VR] Sala construida en el editor. Revisa en la ventana Scene: mesa, bomba, cables, HUD y botón R. Pulsa Play para jugar.</color>");
@@ -130,29 +131,32 @@ public static class BombRoomSetup
             Debug.LogWarning("[Bomba VR] No existe BombRoom en la escena activa. Ejecuta 'Construir sala en la escena actual' primero.");
             return;
         }
-
         GameObject oldBomb = null;
         foreach (Transform t in root.transform)
         {
             if (t != null && t.name == "Bomba") { oldBomb = t.gameObject; break; }
         }
 
-        GameObject oldTable = null;
+        GameObject oldIntro = null;
         foreach (Transform t in root.transform)
         {
-            if (t != null && t.name == "Table") { oldTable = t.gameObject; break; }
+            if (t != null && t.name == "PresentBoxIntro") { oldIntro = t.gameObject; break; }
         }
 
         if (oldBomb != null) Object.DestroyImmediate(oldBomb);
-        if (oldTable != null) Object.DestroyImmediate(oldTable);
+        if (oldIntro != null) Object.DestroyImmediate(oldIntro);
 
         EnsureMaterialsFolder();
-        float tableTop = BuildTable(root);
-        BuildBomb(root, tableTop);
+        Transform tableTopTransform = root.transform.Find("Table/Top");
+        if (tableTopTransform == null)
+            tableTopTransform = BuildTable(root).transform.Find("Top");
+
+        TablePlacement table = GetTablePlacement(root, tableTopTransform);
+        BuildBomb(root, table);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
-        Debug.Log($"<color=#7CFC00>[Bomba VR] Bomba reconstruida (tablero a {tableTop:F2}m). Cuerpo algo más pequeño, texto fuera y agarre con manos activo. Testea en Play.</color>");
+        Debug.Log($"<color=#7CFC00>[Bomba VR] Bomba reconstruida sobre la mesa existente (tablero a {table.TopY:F2}m). Testea en Play.</color>");
     }
 
     /// <summary>
@@ -246,7 +250,7 @@ public static class BombRoomSetup
 
     // ------------------------------------------------------------------ Sala
 
-    private static float BuildTable(GameObject root)
+    private static GameObject BuildTable(GameObject root)
     {
         GameObject table = new GameObject("Table");
         table.transform.SetParent(root.transform, false);
@@ -267,13 +271,13 @@ public static class BombRoomSetup
         foreach (Vector3 corner in corners)
             Cube(table.transform, "Leg", corner, new Vector3(0.05f, 0.70f, 0.05f), leg);
 
-        return 0.74f;
+        return table;
     }
 
-    private static void BuildBomb(GameObject root, float tableTop)
+    private static void BuildBomb(GameObject root, TablePlacement table)
     {
         const float bodyW = 0.6f, bodyH = 0.4f, bodyD = 0.4f;
-        float bombCenterY = tableTop + bodyH * 0.5f;
+        float bombCenterY = table.TopY + bodyH * 0.5f;
 
         Material body = GetMaterial("Mat_Bomba", new Color(0.09f, 0.09f, 0.11f));
         Material panel = GetMaterial("Mat_Panel", new Color(0.05f, 0.055f, 0.06f));
@@ -296,7 +300,7 @@ public static class BombRoomSetup
         // con coordenadas en metros, sin deformar textos ni esferas.
         GameObject bomb = new GameObject("Bomba");
         bomb.transform.SetParent(root.transform, false);
-        bomb.transform.position = new Vector3(0f, bombCenterY, 0f);
+        bomb.transform.position = new Vector3(table.Center.x, bombCenterY, table.Center.z);
 
         GameObject bodyCube = GameObject.CreatePrimitive(PrimitiveType.Cube);
         bodyCube.name = "Body";
@@ -317,6 +321,7 @@ public static class BombRoomSetup
 
         BombManager manager = bomb.AddComponent<BombManager>();
         manager.penaltyPerStrike = 35f;
+        manager.autoStart = false;
 
         // La bomba se puede agarrar y girar para ver sus caras (solo manos).
         Rigidbody bombRb = bomb.AddComponent<Rigidbody>();
@@ -370,6 +375,114 @@ public static class BombRoomSetup
 
         // --- Botón de activación en la Cara Superior (se enciende al terminar).
         BuildArmButton(bomb.transform, manager, buttonMat);
+
+        BuildPresentIntro(root.transform, bomb.transform, table);
+    }
+
+    private static void BuildPresentIntro(Transform roomRoot, Transform bomb, TablePlacement table)
+    {
+        Material paper = GetMaterial("Mat_GiftPaper", new Color(0.72f, 0.04f, 0.07f), metallic: 0f, smoothness: 0.25f);
+        Material ribbon = GetMaterial("Mat_GiftRibbon", new Color(1f, 0.76f, 0.12f), metallic: 0f, smoothness: 0.5f, emission: 0.15f);
+
+        GameObject intro = new GameObject("PresentBoxIntro");
+        intro.transform.SetParent(roomRoot, false);
+
+        GameObject wrapping = new GameObject("Wrapping");
+        wrapping.transform.SetParent(intro.transform, false);
+        wrapping.transform.localPosition = Vector3.zero;
+
+        const float width = 0.86f;
+        const float height = 0.68f;
+        const float depth = 0.72f;
+        const float wall = 0.025f;
+        intro.transform.position = new Vector3(table.Center.x, table.TopY + height * 0.5f, table.Center.z);
+
+        GiftPanel(wrapping.transform, "Gift_Front", new Vector3(0f, 0f, depth * 0.5f), new Vector3(width, height, wall), paper);
+        GiftPanel(wrapping.transform, "Gift_Back", new Vector3(0f, 0f, -depth * 0.5f), new Vector3(width, height, wall), paper);
+        GiftPanel(wrapping.transform, "Gift_Left", new Vector3(-width * 0.5f, 0f, 0f), new Vector3(wall, height, depth), paper);
+        GiftPanel(wrapping.transform, "Gift_Right", new Vector3(width * 0.5f, 0f, 0f), new Vector3(wall, height, depth), paper);
+        GiftPanel(wrapping.transform, "Gift_Top", new Vector3(0f, height * 0.5f, 0f), new Vector3(width, wall, depth), paper);
+        GiftPanel(wrapping.transform, "Gift_Bottom", new Vector3(0f, -height * 0.5f, 0f), new Vector3(width, wall, depth), paper);
+
+        Cube(wrapping.transform, "Ribbon_Vertical", new Vector3(0f, 0f, depth * 0.5f + 0.004f), new Vector3(0.07f, height + 0.02f, 0.014f), ribbon);
+        Cube(wrapping.transform, "Ribbon_Horizontal", new Vector3(0f, 0f, depth * 0.5f + 0.006f), new Vector3(width + 0.02f, 0.07f, 0.014f), ribbon);
+        Cube(wrapping.transform, "Ribbon_Top_X", new Vector3(0f, height * 0.5f + 0.006f, 0f), new Vector3(width + 0.02f, 0.014f, 0.07f), ribbon);
+        Cube(wrapping.transform, "Ribbon_Top_Z", new Vector3(0f, height * 0.5f + 0.008f, 0f), new Vector3(0.07f, 0.014f, depth + 0.02f), ribbon);
+
+        GameObject bowLeft = Sphere(wrapping.transform, "Bow_Left", new Vector3(-0.07f, height * 0.5f + 0.05f, 0f), 0.06f, ribbon);
+        bowLeft.transform.localScale = new Vector3(0.12f, 0.06f, 0.08f);
+        DestroyCollider(bowLeft);
+        GameObject bowRight = Sphere(wrapping.transform, "Bow_Right", new Vector3(0.07f, height * 0.5f + 0.05f, 0f), 0.06f, ribbon);
+        bowRight.transform.localScale = new Vector3(0.12f, 0.06f, 0.08f);
+        DestroyCollider(bowRight);
+
+        GameObject lace = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        lace.name = "PullLace";
+        lace.transform.SetParent(wrapping.transform, false);
+        lace.transform.localPosition = new Vector3(0f, -0.13f, depth * 0.5f + 0.05f);
+        lace.transform.localRotation = Quaternion.identity;
+        lace.transform.localScale = new Vector3(0.01f, 0.18f, 0.01f);
+        lace.GetComponent<Renderer>().sharedMaterial = ribbon;
+        DestroyCollider(lace);
+
+        GameObject handle = Sphere(wrapping.transform, "PullLaceHandle", new Vector3(0f, -0.34f, depth * 0.5f + 0.06f), 0.055f, ribbon);
+        Rigidbody handleRb = handle.AddComponent<Rigidbody>();
+        handleRb.isKinematic = true;
+        handleRb.useGravity = false;
+        Isdk.Grab(handle, handleRb);
+        Isdk.HandGrab(handle, handleRb);
+
+        PresentBoxReveal reveal = intro.AddComponent<PresentBoxReveal>();
+        reveal.bomb = bomb;
+        reveal.laceHandle = handle.transform;
+        reveal.wrappingRoot = wrapping;
+        reveal.tableTop = table.TopTransform;
+        reveal.boxHeight = height;
+
+        bomb.gameObject.SetActive(false);
+    }
+
+    private static GameObject GiftPanel(Transform parent, string name, Vector3 localPos, Vector3 scale, Material mat)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = name;
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPos;
+        go.transform.localScale = scale;
+        go.GetComponent<Renderer>().sharedMaterial = mat;
+        return go;
+    }
+
+    private readonly struct TablePlacement
+    {
+        public readonly Vector3 Center;
+        public readonly float TopY;
+        public readonly Transform TopTransform;
+
+        public TablePlacement(Vector3 center, float topY, Transform topTransform)
+        {
+            Center = center;
+            TopY = topY;
+            TopTransform = topTransform;
+        }
+    }
+
+    private static TablePlacement GetTablePlacement(GameObject root, Transform tableTop)
+    {
+        if (tableTop != null)
+        {
+            Renderer renderer = tableTop.GetComponent<Renderer>();
+            Collider collider = tableTop.GetComponent<Collider>();
+            Bounds bounds;
+            if (collider != null) bounds = collider.bounds;
+            else if (renderer != null) bounds = renderer.bounds;
+            else bounds = new Bounds(tableTop.position, Vector3.zero);
+
+            return new TablePlacement(bounds.center, bounds.max.y, tableTop);
+        }
+
+        Vector3 center = root != null ? root.transform.TransformPoint(Vector3.zero) : Vector3.zero;
+        return new TablePlacement(center, 0.74f, null);
     }
 
     /// <summary>

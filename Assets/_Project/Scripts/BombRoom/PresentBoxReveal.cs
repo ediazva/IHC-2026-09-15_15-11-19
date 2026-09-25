@@ -1,8 +1,10 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using Oculus.Interaction;
 using Oculus.Interaction.HandGrab;
 using UnityEngine;
+using UnityEngine.XR.Hands;
 #if UNITY_EDITOR
 using UnityEngine.InputSystem;
 #endif
@@ -19,12 +21,20 @@ public class PresentBoxReveal : MonoBehaviour
     public GameObject wrappingRoot;
     public Transform tableTop;
 
+    [Header("Intro")]
+    public bool skipPresentIntro = true;
+
     [Header("Reveal")]
     public float pullDistance = 0.18f;
     public float boxHeight = 0.68f;
     public float floatHeight = 0.45f;
     public float riseSpeed = 1.8f;
     public float spinDegreesPerSecond = 55f;
+
+    [Header("Pinch Reveal")]
+    public float pinchFingerDistance = 0.035f;
+    public float pinchStartRadius = 0.35f;
+    public float ovrPinchThreshold = 0.8f;
 
     private Vector3 laceStartPosition;
     private Vector3 bombRestPosition;
@@ -36,11 +46,47 @@ public class PresentBoxReveal : MonoBehaviour
     private bool bombActivated;
 
     private GrabInteractable laceGrab;
+    private HandGrabInteractable laceHandGrab;
     private GrabInteractable bombGrab;
     private HandGrabInteractable bombHandGrab;
-    private Action<InteractableStateChangeArgs> laceHandler;
+    private Action<InteractableStateChangeArgs> laceGrabHandler;
+    private Action<InteractableStateChangeArgs> laceHandGrabHandler;
     private Action<InteractableStateChangeArgs> bombGrabHandler;
     private Action<InteractableStateChangeArgs> bombHandGrabHandler;
+
+    private XRHandSubsystem handSubsystem;
+    private static readonly List<XRHandSubsystem> handSubsystems = new List<XRHandSubsystem>();
+    private bool leftPinching;
+    private bool rightPinching;
+    private bool leftPinchStartedOnLace;
+    private bool rightPinchStartedOnLace;
+    private Vector3 leftPinchStart;
+    private Vector3 rightPinchStart;
+    private Transform trackingSpace;
+
+    private void OnEnable()
+    {
+        TrySubscribeHandSubsystem();
+    }
+
+    private void TrySubscribeHandSubsystem()
+    {
+        if (handSubsystem != null) return;
+
+        SubsystemManager.GetSubsystems(handSubsystems);
+        if (handSubsystems.Count == 0) return;
+
+        handSubsystem = handSubsystems[0];
+        handSubsystem.updatedHands += OnUpdatedHands;
+    }
+
+    private void OnDisable()
+    {
+        if (handSubsystem == null) return;
+
+        handSubsystem.updatedHands -= OnUpdatedHands;
+        handSubsystem = null;
+    }
 
     private void Awake()
     {
@@ -56,16 +102,24 @@ public class PresentBoxReveal : MonoBehaviour
         {
             bombRestPosition = bomb.position;
             bombRestRotation = bomb.rotation;
-            bomb.gameObject.SetActive(false);
+            if (!skipPresentIntro)
+                bomb.gameObject.SetActive(false);
         }
+
+        if (skipPresentIntro && wrappingRoot != null)
+            wrappingRoot.SetActive(false);
     }
 
     private void Start()
     {
         SnapWrappingToTable();
         laceGrab = laceHandle != null ? laceHandle.GetComponent<GrabInteractable>() : null;
-        laceHandler = Isdk.Bind(laceGrab, null, CheckPulledFarEnough, laceHandler);
+        laceHandGrab = laceHandle != null ? laceHandle.GetComponent<HandGrabInteractable>() : null;
+        laceGrabHandler = BindLaceReveal(laceGrab, laceGrabHandler);
+        laceHandGrabHandler = BindLaceReveal(laceHandGrab, laceHandGrabHandler);
 
+        if (skipPresentIntro)
+            Reveal();
     }
 
     private void SnapWrappingToTable()
@@ -102,19 +156,24 @@ public class PresentBoxReveal : MonoBehaviour
 
     private void Update()
     {
+        TrySubscribeHandSubsystem();
+
 #if UNITY_EDITOR
         if (!revealed && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             Reveal();
 #endif
 
+        if (!revealed)
+        {
+            UpdateOvrPinchPull(OVRInput.Axis1D.PrimaryIndexTrigger, OVRInput.Controller.LHand, ref leftPinching, ref leftPinchStartedOnLace, ref leftPinchStart);
+            UpdateOvrPinchPull(OVRInput.Axis1D.SecondaryIndexTrigger, OVRInput.Controller.RHand, ref rightPinching, ref rightPinchStartedOnLace, ref rightPinchStart);
+        }
+
         if (!revealed && laceHandle != null)
             CheckPulledFarEnough();
 
-        if (!floating || bomb == null) return;
-
-        Vector3 target = bombRestPosition + Vector3.up * floatHeight;
-        bomb.position = Vector3.MoveTowards(bomb.position, target, riseSpeed * Time.deltaTime);
-        bomb.Rotate(Vector3.up, spinDegreesPerSecond * Time.deltaTime, Space.World);
+        if (floating && bomb != null)
+            bomb.Rotate(Vector3.up, spinDegreesPerSecond * Time.deltaTime, Space.World);
     }
 
     private void CheckPulledFarEnough()
@@ -125,8 +184,137 @@ public class PresentBoxReveal : MonoBehaviour
         Reveal();
     }
 
+    private void OnUpdatedHands(XRHandSubsystem subsystem, XRHandSubsystem.UpdateSuccessFlags updateSuccessFlags, XRHandSubsystem.UpdateType updateType)
+    {
+        if (revealed || updateType != XRHandSubsystem.UpdateType.Dynamic) return;
+
+        if (HasUpdateSuccessFlag(updateSuccessFlags, XRHandSubsystem.UpdateSuccessFlags.LeftHandJoints)
+            && UpdatePinchPull(subsystem.leftHand, ref leftPinching, ref leftPinchStartedOnLace, ref leftPinchStart)) return;
+
+        if (HasUpdateSuccessFlag(updateSuccessFlags, XRHandSubsystem.UpdateSuccessFlags.RightHandJoints)
+            && UpdatePinchPull(subsystem.rightHand, ref rightPinching, ref rightPinchStartedOnLace, ref rightPinchStart)) return;
+    }
+
+    private bool UpdatePinchPull(XRHand hand, ref bool wasPinching, ref bool startedOnLace, ref Vector3 pinchStart)
+    {
+        if (!TryGetPinchPosition(hand, out Vector3 pinchPosition))
+        {
+            wasPinching = false;
+            startedOnLace = false;
+            return false;
+        }
+
+        if (!wasPinching)
+        {
+            wasPinching = true;
+            startedOnLace = IsNearLace(pinchPosition);
+            pinchStart = pinchPosition;
+            return false;
+        }
+
+        if (!startedOnLace) return false;
+        if (Vector3.Distance(pinchPosition, pinchStart) < pullDistance) return false;
+
+        Reveal();
+        return true;
+    }
+
+    private void UpdateOvrPinchPull(OVRInput.Axis1D pinchAxis, OVRInput.Controller controller, ref bool wasPinching, ref bool startedOnLace, ref Vector3 pinchStart)
+    {
+        if (revealed) return;
+
+        if (OVRInput.Get(pinchAxis) < ovrPinchThreshold)
+        {
+            wasPinching = false;
+            startedOnLace = false;
+            return;
+        }
+
+        Vector3 pinchPosition = OvrControllerWorldPosition(controller);
+        if (!wasPinching)
+        {
+            wasPinching = true;
+            startedOnLace = IsNearLace(pinchPosition);
+            pinchStart = pinchPosition;
+            return;
+        }
+
+        if (!startedOnLace) return;
+        if (Vector3.Distance(pinchPosition, pinchStart) < pullDistance) return;
+
+        Reveal();
+    }
+
+    private bool IsNearLace(Vector3 position)
+    {
+        if (laceHandle == null) return true;
+
+        return Vector3.Distance(position, laceHandle.position) <= pinchStartRadius;
+    }
+
+    private Vector3 OvrControllerWorldPosition(OVRInput.Controller controller)
+    {
+        if (trackingSpace == null)
+        {
+            GameObject trackingSpaceGo = GameObject.Find("TrackingSpace");
+            if (trackingSpaceGo != null) trackingSpace = trackingSpaceGo.transform;
+        }
+
+        Vector3 localPosition = OVRInput.GetLocalControllerPosition(controller);
+        return trackingSpace != null ? trackingSpace.TransformPoint(localPosition) : localPosition;
+    }
+
+    private bool TryGetPinchPosition(XRHand hand, out Vector3 pinchPosition)
+    {
+        pinchPosition = default;
+        if (!hand.isTracked) return false;
+
+        XRHandJoint thumbTip = hand.GetJoint(XRHandJointID.ThumbTip);
+        XRHandJoint indexTip = hand.GetJoint(XRHandJointID.IndexTip);
+        if (!thumbTip.TryGetPose(out Pose thumbPose) || !indexTip.TryGetPose(out Pose indexPose)) return false;
+        if (Vector3.Distance(thumbPose.position, indexPose.position) > pinchFingerDistance) return false;
+
+        pinchPosition = (thumbPose.position + indexPose.position) * 0.5f;
+        return true;
+    }
+
+    private static bool HasUpdateSuccessFlag(XRHandSubsystem.UpdateSuccessFlags successFlags, XRHandSubsystem.UpdateSuccessFlags successFlag)
+    {
+        return (successFlags & successFlag) == successFlag;
+    }
+
+    private Action<InteractableStateChangeArgs> BindLaceReveal(GrabInteractable interactable, Action<InteractableStateChangeArgs> previous)
+    {
+        if (interactable == null) return previous;
+        if (previous != null) interactable.WhenStateChanged -= previous;
+
+        Action<InteractableStateChangeArgs> handler = args =>
+        {
+            if (args.PreviousState == InteractableState.Select)
+                CheckPulledFarEnough();
+        };
+        interactable.WhenStateChanged += handler;
+        return handler;
+    }
+
+    private Action<InteractableStateChangeArgs> BindLaceReveal(HandGrabInteractable interactable, Action<InteractableStateChangeArgs> previous)
+    {
+        if (interactable == null) return previous;
+        if (previous != null) interactable.WhenStateChanged -= previous;
+
+        Action<InteractableStateChangeArgs> handler = args =>
+        {
+            if (args.PreviousState == InteractableState.Select)
+                CheckPulledFarEnough();
+        };
+        interactable.WhenStateChanged += handler;
+        return handler;
+    }
+
     private void Reveal()
     {
+        if (revealed) return;
+
         revealed = true;
 
         if (wrappingRoot != null) wrappingRoot.SetActive(false);
@@ -195,7 +383,6 @@ public class PresentBoxReveal : MonoBehaviour
         if (!revealed) return;
 
         floating = false;
-        if (bomb != null) bomb.rotation = bombRestRotation;
     }
 
     private void SetBombInteractionEnabled(bool enabled)
@@ -206,7 +393,8 @@ public class PresentBoxReveal : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (laceGrab != null && laceHandler != null) laceGrab.WhenStateChanged -= laceHandler;
+        if (laceGrab != null && laceGrabHandler != null) laceGrab.WhenStateChanged -= laceGrabHandler;
+        if (laceHandGrab != null && laceHandGrabHandler != null) laceHandGrab.WhenStateChanged -= laceHandGrabHandler;
         if (bombGrab != null && bombGrabHandler != null) bombGrab.WhenStateChanged -= bombGrabHandler;
         if (bombHandGrab != null && bombHandGrabHandler != null) bombHandGrab.WhenStateChanged -= bombHandGrabHandler;
     }

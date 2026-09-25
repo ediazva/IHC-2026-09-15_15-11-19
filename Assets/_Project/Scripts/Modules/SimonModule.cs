@@ -1,62 +1,42 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
 using Oculus.Interaction;
+using UnityEngine;
 
 /// <summary>
-/// Módulo "Simón": rejilla 3x3 de botones de color en la cara IZQUIERDA del cubo.
-/// La bomba muestra una secuencia de luces y el jugador debe repetirla pulsando
-/// los botones en el mismo orden. Un fallo resuelve un strike y repite la ronda.
-///
-/// El puzzle avanza por RONDAS que crecen: la primera es más corta y cada ronda
-/// superada alarga la secuencia, de forma que resolverlo ronda los 30-60 s.
-///
-/// Igual que el resto, admite dos vías:
-///  * Escena autorada en el editor (lista serializada "buttons").
-///  * Construcción dinámica en ResetModule().
+/// Simple Simon Says module: 3x3 buttons, press the larger start button, watch a
+/// pattern, repeat it. Complete three rounds to solve the module.
 /// </summary>
 public class SimonModule : ModuleBase
 {
-    /// <summary>Medidas en metros, en espacio local del cubo (cara izquierda).</summary>
     public static class Layout
     {
-        public const float FaceX = -0.20f;    // cara izquierda del cubo (-X, cuerpo 0.4 de ancho)
+        public const float FaceX = -0.20f;
         public const float PanelX = -0.184f;
-        public const int GridSize = 3;        // rejilla 3x3
-        public const float Spacing = 0.072f;  // separación entre centros
+        public const int GridSize = 3;
+        public const float Spacing = 0.072f;
         public const float ButtonSize = 0.065f;
     }
 
-    /// <summary>
-    /// Frecuencias (Hz) de la escala pentatónica de do mayor, una por botón.
-    /// El "pim pim" pasa a ser una melodía agradable en lugar de un tick áspero.
-    /// </summary>
     public static readonly float[] NoteFrequencies =
     {
-        523.25f, // Do5
-        587.33f, // Re5
-        659.25f, // Mi5
-        783.99f, // Sol5
-        880.00f, // La5
-        1046.50f, // Do6
-        1174.66f, // Re6
-        1318.51f, // Mi6
-        1567.98f, // Sol6
+        523.25f, 587.33f, 659.25f,
+        783.99f, 880.00f, 1046.50f,
+        1174.66f, 1318.51f, 1567.98f,
     };
 
-    /// <summary>9 colores vivos de los botones (rejilla 3x3, tipo arcoíris).</summary>
     public static readonly Color[] ButtonColors =
     {
-        new Color(0.90f, 0.16f, 0.13f), // rojo
-        new Color(0.95f, 0.48f, 0.10f), // naranja
-        new Color(0.96f, 0.86f, 0.18f), // amarillo
-        new Color(0.32f, 0.80f, 0.24f), // verde
-        new Color(0.16f, 0.80f, 0.72f), // turquesa
-        new Color(0.18f, 0.47f, 0.96f), // azul
-        new Color(0.55f, 0.30f, 0.95f), // violeta
-        new Color(0.93f, 0.28f, 0.72f), // magenta
-        new Color(0.95f, 0.95f, 0.95f), // blanco
+        new Color(0.90f, 0.16f, 0.13f),
+        new Color(0.95f, 0.48f, 0.10f),
+        new Color(0.96f, 0.86f, 0.18f),
+        new Color(0.32f, 0.80f, 0.24f),
+        new Color(0.16f, 0.80f, 0.72f),
+        new Color(0.18f, 0.47f, 0.96f),
+        new Color(0.55f, 0.30f, 0.95f),
+        new Color(0.93f, 0.28f, 0.72f),
+        new Color(0.95f, 0.95f, 0.95f),
     };
 
     [Serializable]
@@ -67,36 +47,34 @@ public class SimonModule : ModuleBase
 
         [NonSerialized] public Renderer renderer;
         [NonSerialized] public Material material;
-        [NonSerialized] public float litUntil;
+        [NonSerialized] public PokeInteractable poke;
         [NonSerialized] public Action<InteractableStateChangeArgs> handler;
+        [NonSerialized] public float litUntil;
     }
 
-    [Header("Configuración")]
-    [Tooltip("Pasos de la primera ronda.")]
-    [SerializeField] private int startLength = 4;
-    [Tooltip("Cuántas rondas hay que superar para resolver el módulo.")]
+    [Header("Config")]
     [SerializeField] private int roundsToSolve = 3;
-    [Tooltip("Cuánto crece la secuencia en cada ronda nueva.")]
-    [SerializeField] private int lengthIncreasePerRound = 1;
-    [SerializeField] private float stepDuration = 0.40f;
-    [SerializeField] private float stepGap = 0.15f;
-    [SerializeField] private float startDelay = 1.00f;
-    [SerializeField] private float roundPause = 0.70f;
+    [SerializeField] private int basePatternLength = 3;
+    [SerializeField] private float flashDuration = 0.45f;
+    [SerializeField] private float flashGap = 0.16f;
+    [SerializeField] private float playbackDelay = 0.55f;
+    [SerializeField] private float nextRoundDelay = 0.75f;
 
-    [Header("Estado (lo crea el constructor de la escena)")]
+    [Header("Scene References")]
     [SerializeField] private List<SimonButton> buttons = new List<SimonButton>();
     [SerializeField] private GameObject startButton;
 
-    private readonly List<int> sequence = new List<int>();
+    private readonly List<int> pattern = new List<int>();
+    private BombManager bomb;
+    private Coroutine playback;
+    private PokeInteractable startPoke;
+    private Action<InteractableStateChangeArgs> startHandler;
+    private bool started;
+    private bool acceptingInput;
     private int inputIndex;
     private int currentRound;
-    private bool acceptingInput;
-    private Coroutine playbackRoutine;
-    private BombManager bomb;
-    private bool startPressed;
-    private Action<InteractableStateChangeArgs> startHandler;
 
-    public int SequenceLength => sequence.Count;
+    public int SequenceLength => pattern.Count;
     public int Progress => inputIndex;
     public int TotalRounds => Mathf.Max(1, roundsToSolve);
     public int RoundsCompleted => currentRound;
@@ -107,68 +85,47 @@ public class SimonModule : ModuleBase
 
     private void Awake()
     {
-        Title = "SIMÓN";
+        Title = "SIMON";
     }
 
     private void Start()
     {
         bomb = GetComponentInParent<BombManager>();
-        Prepare();
+        PrepareButtons();
 
         if (bomb != null)
-        {
-            bomb.OnStateChanged += OnBombState;
-            if (bomb.State == BombState.Running) PrepareRoundIfAutoplay();
-        }
-        else
-        {
-            PrepareRoundIfAutoplay();
-        }
+            bomb.OnStateChanged += OnBombStateChanged;
     }
 
     private void OnDestroy()
     {
-        if (bomb != null) bomb.OnStateChanged -= OnBombState;
+        if (bomb != null)
+            bomb.OnStateChanged -= OnBombStateChanged;
+
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            SimonButton button = buttons[i];
+            if (button?.poke != null && button.handler != null)
+                button.poke.WhenStateChanged -= button.handler;
+        }
+
+        if (startPoke != null && startHandler != null)
+            startPoke.WhenStateChanged -= startHandler;
     }
 
     public override void ResetModule()
     {
         base.ResetModule();
         StopPlayback();
+        pattern.Clear();
+        started = false;
+        acceptingInput = false;
         inputIndex = 0;
         currentRound = 0;
-        acceptingInput = false;
-        startPressed = false;
-        for (int i = 0; i < buttons.Count; i++)
-            if (buttons[i] != null) buttons[i].litUntil = 0f;
+        ClearLights();
     }
 
-    private void OnBombState(BombState state)
-    {
-        if (state == BombState.Running)
-        {
-            PrepareRoundIfAutoplay();
-        }
-        else if (state == BombState.Finalizado || state == BombState.Defused || state == BombState.Exploded)
-        {
-            StopPlayback();
-            acceptingInput = false;
-        }
-    }
-
-    /// <summary>
-    /// Si la escena NO tiene botón START (construcción dinámica sin él), la
-    /// secuencia comienza sola al arrancar la bomba. Con botón START, el jugador
-    /// decide cuándo empezar: no se reproduce nada hasta pulsarlo.
-    /// </summary>
-    private void PrepareRoundIfAutoplay()
-    {
-        if (startButton == null && !startPressed) PlaySequence();
-    }
-
-    // ------------------------------------------------------------------ Preparación
-
-    private void Prepare()
+    private void PrepareButtons()
     {
         for (int i = 0; i < buttons.Count; i++)
         {
@@ -184,146 +141,160 @@ public class SimonModule : ModuleBase
                 button.renderer.sharedMaterial = button.material;
             }
 
-            button.gameObject.SetActive(true);
-
             int index = i;
-            Vector3 outDir = OutwardOf(button.gameObject);
-            PokeInteractable poke = Isdk.Poke(button.gameObject, outDir);
-            button.handler = Isdk.Bind(poke, () => OnButtonPressed(index), null, button.handler);
+            button.poke = Isdk.Poke(button.gameObject, OutwardOf(button.gameObject));
+            button.handler = Isdk.Bind(button.poke, () => PressButton(index), null, button.handler);
+            button.gameObject.SetActive(true);
         }
 
-        if (startButton != null && startButton.gameObject != null)
+        if (startButton != null)
         {
-            Vector3 outDir = OutwardOf(startButton.gameObject);
-            PokeInteractable poke = Isdk.Poke(startButton.gameObject, outDir);
-            startHandler = Isdk.Bind(poke, OnStartPressed, null, startHandler);
+            startPoke = Isdk.Poke(startButton, OutwardOf(startButton));
+            startHandler = Isdk.Bind(startPoke, PressStart, null, startHandler);
         }
     }
 
-    /// <summary>Dirección (local del botón) desde la que llega el dedo: hacia fuera de la bomba.</summary>
     private Vector3 OutwardOf(GameObject go)
     {
         Vector3 center = bomb != null ? bomb.transform.position : transform.position;
         Vector3 worldOut = go.transform.position - center;
-        if (worldOut.sqrMagnitude < 0.0001f) worldOut = new Vector3(-1f, 0f, 0f);
-        return go.transform.InverseTransformDirection(worldOut).normalized;
+        if (worldOut.sqrMagnitude < 0.0001f)
+            worldOut = transform.TransformDirection(Vector3.left);
+
+        return go.transform.InverseTransformDirection(worldOut.normalized).normalized;
     }
 
-    /// <summary>El jugador pulsa START para hacer sonar/ver la secuencia.</summary>
-    private void OnStartPressed()
+    private void OnBombStateChanged(BombState state)
     {
-        if (IsSolved || startPressed) return;
-        if (bomb != null && bomb.State != BombState.Running) return;
-
-        startPressed = true;
-        SFX.Tone(880f, 0.10f, 0.45f);
-        PlaySequence();
+        if (state == BombState.Finalizado || state == BombState.Defused || state == BombState.Exploded)
+        {
+            StopPlayback();
+            acceptingInput = false;
+        }
     }
 
-    // ------------------------------------------------------------------ Secuencia
-
-    public void PlaySequence()
+    private void PressStart()
     {
-        if (IsSolved || buttons.Count == 0) return;
+        Debug.Log("[Simon] START press received", this);
 
+        if (IsSolved || started) return;
+        if (bomb != null && bomb.State != BombState.Running)
+        {
+            Debug.Log($"[Simon] START ignored, bomb state is {bomb.State}", this);
+            return;
+        }
+
+        started = true;
+        currentRound = 0;
+        SFX.Tone(880f, 0.12f, 0.5f);
+        StartRound();
+    }
+
+    private void StartRound()
+    {
         StopPlayback();
-        BuildSequence();
+        BuildPattern(basePatternLength + currentRound);
         inputIndex = 0;
         acceptingInput = false;
-        playbackRoutine = StartCoroutine(PlaybackRoutine());
+        playback = StartCoroutine(PlayPattern());
     }
 
-    private void BuildSequence()
+    private void BuildPattern(int length)
     {
-        sequence.Clear();
-        int length = Mathf.Max(1, startLength + currentRound * lengthIncreasePerRound);
+        pattern.Clear();
+        int count = Mathf.Max(1, buttons.Count);
         for (int i = 0; i < length; i++)
-            sequence.Add(UnityEngine.Random.Range(0, buttons.Count));
+            pattern.Add(UnityEngine.Random.Range(0, count));
     }
 
-    private IEnumerator PlaybackRoutine()
+    private IEnumerator PlayPattern()
     {
-        yield return new WaitForSeconds(startDelay);
+        yield return new WaitForSeconds(playbackDelay);
 
-        for (int i = 0; i < sequence.Count; i++)
+        for (int i = 0; i < pattern.Count; i++)
         {
-            int index = sequence[i];
-            Flash(index, stepDuration);
-            SFX.Tone(NoteFrequencies[index], stepDuration + 0.10f, 0.5f);
-            yield return new WaitForSeconds(stepDuration + stepGap);
+            int index = pattern[i];
+            Flash(index, flashDuration);
+            SFX.Tone(NoteFrequencies[Mathf.Clamp(index, 0, NoteFrequencies.Length - 1)], flashDuration, 0.55f);
+            yield return new WaitForSeconds(flashDuration + flashGap);
         }
 
         acceptingInput = true;
-        playbackRoutine = null;
+        playback = null;
     }
 
-    private void OnButtonPressed(int index)
+    private void PressButton(int index)
     {
-        if (IsSolved || !acceptingInput) return;
-        if (index < 0 || index >= buttons.Count) return;
+        Debug.Log($"[Simon] Button {index} press received", this);
 
-        Flash(index, 0.15f);
-        Debug.Log($"[Simón] pulsado {index}; esperaba {sequence[inputIndex]}", this);
-
-        if (index == sequence[inputIndex])
+        if (!acceptingInput || IsSolved)
         {
-            inputIndex++;
-            SFX.Tone(NoteFrequencies[index], 0.25f, 0.5f);
-
-            if (inputIndex >= sequence.Count)
-            {
-                acceptingInput = false;
-                currentRound++;
-
-                if (currentRound >= TotalRounds)
-                {
-                    OnSimonComplete?.Invoke();
-                    SFX.Play(SfxType.Solved, 0.8f);
-                    Solve();
-                }
-                else
-                {
-                    OnRoundComplete?.Invoke(currentRound, TotalRounds);
-                    SFX.Play(SfxType.Solved, 0.5f);
-                    playbackRoutine = StartCoroutine(NextRoundAfterDelay(roundPause));
-                }
-            }
+            Debug.Log($"[Simon] Button {index} ignored. acceptingInput={acceptingInput}, solved={IsSolved}", this);
+            return;
         }
-        else
+        if (index < 0 || index >= buttons.Count || inputIndex >= pattern.Count) return;
+
+        Flash(index, 0.18f);
+        SFX.Tone(NoteFrequencies[Mathf.Clamp(index, 0, NoteFrequencies.Length - 1)], 0.2f, 0.55f);
+
+        if (index != pattern[inputIndex])
         {
             acceptingInput = false;
             OnSimonWrong?.Invoke();
             SFX.Play(SfxType.Denied, 0.7f);
             AddStrike();
-            playbackRoutine = StartCoroutine(ReplayAfterDelay(1.0f));
+            playback = StartCoroutine(RestartRoundAfterDelay(0.8f));
+            return;
         }
+
+        inputIndex++;
+        if (inputIndex < pattern.Count) return;
+
+        acceptingInput = false;
+        currentRound++;
+
+        if (currentRound >= TotalRounds)
+        {
+            OnSimonComplete?.Invoke();
+            SFX.Play(SfxType.Solved, 0.8f);
+            Solve();
+            return;
+        }
+
+        OnRoundComplete?.Invoke(currentRound, TotalRounds);
+        SFX.Play(SfxType.Solved, 0.5f);
+        playback = StartCoroutine(NextRoundAfterDelay(nextRoundDelay));
     }
 
-    private IEnumerator ReplayAfterDelay(float delay)
+    private IEnumerator RestartRoundAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        PlaySequence();
+        StartRound();
     }
 
     private IEnumerator NextRoundAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        PlaySequence();
+        StartRound();
     }
 
     private void Flash(int index, float duration)
     {
-        if (index >= 0 && index < buttons.Count && buttons[index] != null)
-            buttons[index].litUntil = Time.time + duration;
+        if (index < 0 || index >= buttons.Count || buttons[index] == null) return;
+        buttons[index].litUntil = Time.time + duration;
+    }
+
+    private void ClearLights()
+    {
+        for (int i = 0; i < buttons.Count; i++)
+            if (buttons[i] != null) buttons[i].litUntil = 0f;
     }
 
     private void StopPlayback()
     {
-        if (playbackRoutine != null)
-        {
-            StopCoroutine(playbackRoutine);
-            playbackRoutine = null;
-        }
+        if (playback == null) return;
+        StopCoroutine(playback);
+        playback = null;
     }
 
     private void Update()
@@ -331,16 +302,16 @@ public class SimonModule : ModuleBase
         for (int i = 0; i < buttons.Count; i++)
         {
             SimonButton button = buttons[i];
-            if (button == null || button.material == null) continue;
+            if (button?.material == null) continue;
 
             bool lit = button.litUntil > Time.time;
-            button.material.EnableKeyword("_EMISSION");
-            button.material.SetColor("_EmissionColor", button.color * (lit ? 4.0f : 0f));
-
-            Color baseColor = button.color * (lit ? 1.6f : 0.55f);
+            Color baseColor = button.color * (lit ? 1.7f : 0.5f);
             button.material.SetColor("_BaseColor", baseColor);
             if (button.material.HasProperty("_Color"))
                 button.material.SetColor("_Color", baseColor);
+
+            button.material.EnableKeyword("_EMISSION");
+            button.material.SetColor("_EmissionColor", button.color * (lit ? 4f : 0f));
         }
     }
 }

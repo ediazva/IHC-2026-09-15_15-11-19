@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 using Oculus.Interaction;
 using Oculus.Interaction.HandGrab;
 
@@ -49,9 +50,17 @@ public class BombUI : MonoBehaviour
     // HUDs
     private GameObject controllerHudGo;
     private GameObject cubeHudGo;
+    private GameObject worldTimerGo;
+    private GameObject cameraTimerGo;
+    private GameObject faceTimerGo;
+    private GameObject victoryScreenGo;
     private Canvas controllerCanvas;
     private Canvas cubeCanvas;
+    private TextMeshPro worldTimeText;
+    private TextMeshPro cameraTimeText;
+    private TextMeshPro faceTimeText;
     private Coroutine feedbackRoutine;
+    private Coroutine victoryRoutine;
 
     private void Awake()
     {
@@ -114,6 +123,9 @@ public class BombUI : MonoBehaviour
         // Construir HUDs duales
         BuildControllerHUD();
         BuildCubeHUD();
+        BuildWorldTimer();
+        BuildCameraTimer();
+        BuildFaceTimer();
 
         Subscribe();
 
@@ -208,6 +220,9 @@ public class BombUI : MonoBehaviour
 
         if (controllerTimeText != null) controllerTimeText.text = mmss;
         if (cubeTimeText != null) cubeTimeText.text = mmss;
+        if (worldTimeText != null) worldTimeText.text = mmss;
+        if (cameraTimeText != null) cameraTimeText.text = mmss;
+        if (faceTimeText != null) faceTimeText.text = mmss;
 
         Color timerColor;
         if (rem <= 10) timerColor = new Color(1f, 0.28f, 0.25f);
@@ -216,6 +231,9 @@ public class BombUI : MonoBehaviour
 
         if (controllerTimeText != null) controllerTimeText.color = timerColor;
         if (cubeTimeText != null) cubeTimeText.color = timerColor;
+        if (worldTimeText != null) worldTimeText.color = timerColor;
+        if (cameraTimeText != null) cameraTimeText.color = timerColor;
+        if (faceTimeText != null) faceTimeText.color = timerColor;
 
         // Parpadeo <10s en ambos HUDs
         if (bomb != null && bomb.State == BombState.Running && rem <= 10 && rem > 0)
@@ -271,8 +289,9 @@ public class BombUI : MonoBehaviour
             case BombState.Defused:
                 statusText.text = "BOMBA DESARMADA ✓";
                 statusText.color = new Color(0.35f, 1f, 0.4f);
-                ShowFeedback("DESARMADA!", new Color(0.35f, 1f, 0.4f));
+                ShowFeedback("¡VICTORIA! BOMBA DESARMADA", new Color(0.35f, 1f, 0.4f));
                 SFX.Play(SfxType.Solved, 0.9f);
+                victoryRoutine = StartCoroutine(VictorySequence());
                 break;
 
             case BombState.Exploded:
@@ -427,11 +446,15 @@ public class BombUI : MonoBehaviour
         string mmss = FormatTimeMMSS(timer != null ? Mathf.CeilToInt(timer.RemainingSeconds) : 0);
         if (controllerTimeText != null) controllerTimeText.text = mmss;
         if (cubeTimeText != null) cubeTimeText.text = mmss;
+        if (worldTimeText != null) worldTimeText.text = mmss;
+        if (cameraTimeText != null) cameraTimeText.text = mmss;
+        if (faceTimeText != null) faceTimeText.text = mmss;
         flashActive = false;
         hgState = InteractableState.Normal;
         gState = InteractableState.Normal;
         UpdateBodyHighlight();
         StopAllCoroutines();
+        CleanupVictoryScreen();
         ShowFeedback("", Color.white);
     }
 
@@ -506,6 +529,148 @@ public class BombUI : MonoBehaviour
             yield return null;
         }
         Destroy(flash.gameObject);
+    }
+
+    private IEnumerator VictorySequence()
+    {
+        if (victoryScreenGo != null) yield break;
+
+        // Stop any existing coroutines that might interfere
+        StopAllCoroutines();
+
+        // Create full-screen victory splash
+        victoryScreenGo = new GameObject("VictorySplash");
+        Canvas canvas = victoryScreenGo.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 1000;
+        
+        CanvasScaler scaler = victoryScreenGo.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        
+        victoryScreenGo.AddComponent<GraphicRaycaster>();
+
+        // Full-screen dark overlay
+        GameObject overlay = new GameObject("Overlay");
+        overlay.transform.SetParent(victoryScreenGo.transform, false);
+        RectTransform overlayRect = overlay.AddComponent<RectTransform>();
+        overlayRect.anchorMin = Vector2.zero;
+        overlayRect.anchorMax = Vector2.one;
+        overlayRect.sizeDelta = Vector2.zero;
+        UnityEngine.UI.Image overlayImg = overlay.AddComponent<UnityEngine.UI.Image>();
+        overlayImg.color = new Color(0f, 0f, 0f, 0f);
+        overlayImg.raycastTarget = true;
+
+        // Victory title
+        GameObject titleGo = new GameObject("VictoryTitle");
+        titleGo.transform.SetParent(victoryScreenGo.transform, false);
+        RectTransform titleRect = titleGo.AddComponent<RectTransform>();
+        titleRect.anchorMin = new Vector2(0.5f, 0.5f);
+        titleRect.anchorMax = new Vector2(0.5f, 0.5f);
+        titleRect.pivot = new Vector2(0.5f, 0.5f);
+        titleRect.anchoredPosition = new Vector2(0, 80);
+        titleRect.sizeDelta = new Vector2(1000, 200);
+        
+        TextMeshProUGUI titleText = titleGo.AddComponent<TextMeshProUGUI>();
+        titleText.text = "¡BOMBA DESARMADA!";
+        titleText.fontSize = 120;
+        titleText.color = new Color(0.35f, 1f, 0.4f);
+        titleText.alignment = TextAlignmentOptions.Center;
+        titleText.outlineWidth = 0.3f;
+        titleText.outlineColor = Color.black;
+        if (TMP_Settings.defaultFontAsset != null) titleText.font = TMP_Settings.defaultFontAsset;
+
+        // Subtitle
+        GameObject subGo = new GameObject("VictorySubtitle");
+        subGo.transform.SetParent(victoryScreenGo.transform, false);
+        RectTransform subRect = subGo.AddComponent<RectTransform>();
+        subRect.anchorMin = new Vector2(0.5f, 0.5f);
+        subRect.anchorMax = new Vector2(0.5f, 0.5f);
+        subRect.pivot = new Vector2(0.5f, 0.5f);
+        subRect.anchoredPosition = new Vector2(0, -50);
+        subRect.sizeDelta = new Vector2(800, 100);
+        
+        TextMeshProUGUI subText = subGo.AddComponent<TextMeshProUGUI>();
+        subText.text = "VICTORIA";
+        subText.fontSize = 72;
+        subText.color = new Color(1f, 0.85f, 0.15f);
+        subText.alignment = TextAlignmentOptions.Center;
+        subText.outlineWidth = 0.25f;
+        subText.outlineColor = Color.black;
+        if (TMP_Settings.defaultFontAsset != null) subText.font = TMP_Settings.defaultFontAsset;
+
+        // Time remaining display
+        GameObject timeGo = new GameObject("VictoryTime");
+        timeGo.transform.SetParent(victoryScreenGo.transform, false);
+        RectTransform timeRect = timeGo.AddComponent<RectTransform>();
+        timeRect.anchorMin = new Vector2(0.5f, 0.5f);
+        timeRect.anchorMax = new Vector2(0.5f, 0.5f);
+        timeRect.pivot = new Vector2(0.5f, 0.5f);
+        timeRect.anchoredPosition = new Vector2(0, -150);
+        timeRect.sizeDelta = new Vector2(600, 80);
+        
+        TextMeshProUGUI timeText = timeGo.AddComponent<TextMeshProUGUI>();
+        int rem = timer != null ? Mathf.CeilToInt(timer.TimeLeft) : 0;
+        timeText.text = $"Tiempo restante: {FormatTimeMMSS(rem)}";
+        timeText.fontSize = 48;
+        timeText.color = Color.white;
+        timeText.alignment = TextAlignmentOptions.Center;
+        timeText.outlineWidth = 0.2f;
+        timeText.outlineColor = Color.black;
+        if (TMP_Settings.defaultFontAsset != null) timeText.font = TMP_Settings.defaultFontAsset;
+
+        // Strikes display
+        GameObject strikesGo = new GameObject("VictoryStrikes");
+        strikesGo.transform.SetParent(victoryScreenGo.transform, false);
+        RectTransform strikesRect = strikesGo.AddComponent<RectTransform>();
+        strikesRect.anchorMin = new Vector2(0.5f, 0.5f);
+        strikesRect.anchorMax = new Vector2(0.5f, 0.5f);
+        strikesRect.pivot = new Vector2(0.5f, 0.5f);
+        strikesRect.anchoredPosition = new Vector2(0, -220);
+        strikesRect.sizeDelta = new Vector2(600, 60);
+        
+        TextMeshProUGUI strikesText = strikesGo.AddComponent<TextMeshProUGUI>();
+        int strk = strikes != null ? strikes.Strikes : 0;
+        int maxStrk = strikes != null ? strikes.MaxStrikes : 3;
+        strikesText.text = $"Errores: {strk}/{maxStrk}";
+        strikesText.fontSize = 40;
+        strikesText.color = new Color(0.8f, 0.8f, 0.9f);
+        strikesText.alignment = TextAlignmentOptions.Center;
+        strikesText.outlineWidth = 0.2f;
+        strikesText.outlineColor = Color.black;
+        if (TMP_Settings.defaultFontAsset != null) strikesText.font = TMP_Settings.defaultFontAsset;
+
+        // Animate overlay fade-in
+        float fadeInTime = 0.5f;
+        float t = 0f;
+        while (t < fadeInTime)
+        {
+            t += Time.unscaledDeltaTime;
+            float a = Mathf.Lerp(0f, 0.95f, t / fadeInTime);
+            overlayImg.color = new Color(0f, 0f, 0f, a);
+            yield return null;
+        }
+        overlayImg.color = new Color(0f, 0f, 0f, 0.95f);
+
+        // Pulse title color
+        float pulseTime = 0f;
+        while (victoryScreenGo != null)
+        {
+            pulseTime += Time.unscaledDeltaTime;
+            float pulse = Mathf.Sin(pulseTime * 3f) * 0.3f + 1f;
+            titleText.color = new Color(0.35f * pulse, 1f * pulse, 0.4f * pulse);
+            subText.color = new Color(1f * pulse, 0.85f * pulse, 0.15f * pulse);
+            yield return null;
+        }
+    }
+
+    private void CleanupVictoryScreen()
+    {
+        if (victoryScreenGo != null)
+        {
+            Destroy(victoryScreenGo);
+            victoryScreenGo = null;
+        }
     }
 
     // ------------------------------------------------------------------ HUD Dual Construction
@@ -631,6 +796,75 @@ public class BombUI : MonoBehaviour
         return null;
     }
 
+    private void BuildWorldTimer()
+    {
+        if (bomb == null) return;
+
+        worldTimerGo = new GameObject("WorldTimer3D");
+        worldTimerGo.transform.SetParent(bomb.transform, false);
+        worldTimerGo.transform.localPosition = new Vector3(0f, 0.75f, 0f);
+
+        worldTimeText = worldTimerGo.AddComponent<TextMeshPro>();
+        worldTimeText.alignment = TextAlignmentOptions.Center;
+        worldTimeText.fontSize = 0.28f;
+        worldTimeText.color = new Color(0.35f, 1f, 0.4f);
+        worldTimeText.textWrappingMode = TextWrappingModes.NoWrap;
+        worldTimeText.overflowMode = TextOverflowModes.Overflow;
+        worldTimeText.outlineWidth = 0.25f;
+        worldTimeText.outlineColor = Color.black;
+        worldTimeText.rectTransform.sizeDelta = new Vector2(1.2f, 0.35f);
+        if (TMP_Settings.defaultFontAsset != null) worldTimeText.font = TMP_Settings.defaultFontAsset;
+    }
+
+    private void BuildCameraTimer()
+    {
+        if (Camera.main == null) return;
+
+        cameraTimerGo = new GameObject("CameraTimer3D");
+        cameraTimerGo.transform.SetParent(Camera.main.transform, false);
+        cameraTimerGo.transform.localPosition = new Vector3(0f, -0.26f, 1.15f);
+        cameraTimerGo.transform.localRotation = Quaternion.identity;
+
+        cameraTimeText = cameraTimerGo.AddComponent<TextMeshPro>();
+        cameraTimeText.alignment = TextAlignmentOptions.Center;
+        cameraTimeText.fontSize = 0.12f;
+        cameraTimeText.color = new Color(0.35f, 1f, 0.4f);
+        cameraTimeText.textWrappingMode = TextWrappingModes.NoWrap;
+        cameraTimeText.overflowMode = TextOverflowModes.Overflow;
+        cameraTimeText.outlineWidth = 0.22f;
+        cameraTimeText.outlineColor = Color.black;
+        cameraTimeText.rectTransform.sizeDelta = new Vector2(0.8f, 0.2f);
+        if (TMP_Settings.defaultFontAsset != null) cameraTimeText.font = TMP_Settings.defaultFontAsset;
+    }
+
+    private void BuildFaceTimer()
+    {
+        if (bomb == null) return;
+
+        // Colocar el timer en la cara frontal del cubo (donde está el FrontPanel en z=0.196)
+        faceTimerGo = new GameObject("FaceTimer3D");
+        faceTimerGo.transform.SetParent(bomb.transform, false);
+        faceTimerGo.transform.localPosition = new Vector3(0f, 0f, 0.22f); // Frente de la bomba
+        faceTimerGo.transform.localRotation = Quaternion.Euler(0f, 180f, 0f); // Mirando hacia afuera
+
+        faceTimeText = faceTimerGo.AddComponent<TextMeshPro>();
+        faceTimeText.alignment = TextAlignmentOptions.Center;
+        faceTimeText.fontSize = 0.35f;
+        faceTimeText.color = new Color(0.35f, 1f, 0.4f);
+        faceTimeText.textWrappingMode = TextWrappingModes.NoWrap;
+        faceTimeText.overflowMode = TextOverflowModes.Overflow;
+        faceTimeText.outlineWidth = 0.25f;
+        faceTimeText.outlineColor = Color.black;
+        faceTimeText.rectTransform.sizeDelta = new Vector2(1.5f, 0.4f);
+        if (TMP_Settings.defaultFontAsset != null) faceTimeText.font = TMP_Settings.defaultFontAsset;
+
+        // Panel de fondo para legibilidad
+        Transform bg = Fx.Cube(faceTimerGo.transform, "TimerBg", Vector3.zero,
+            new Vector3(0.28f, 0.14f, 0.01f), new Color(0.01f, 0.01f, 0.02f, 0.9f));
+        Fx.StripCollider(bg.gameObject);
+        bg.SetAsFirstSibling();
+    }
+
     private void LateUpdate()
     {
         // Controller HUD: ya está anclado a la mano, no necesita billboard
@@ -647,6 +881,25 @@ public class BombUI : MonoBehaviour
             cubeHudGo.transform.rotation = Quaternion.LookRotation(bomb.transform.up, -bomb.transform.forward);
         }
 
+        if (worldTimerGo != null && bomb != null)
+        {
+            worldTimerGo.transform.position = bomb.transform.position + Vector3.up * 0.75f;
+            if (Camera.main != null)
+            {
+                Vector3 toCamera = worldTimerGo.transform.position - Camera.main.transform.position;
+                if (toCamera.sqrMagnitude > 0.001f)
+                    worldTimerGo.transform.rotation = Quaternion.LookRotation(toCamera.normalized, Vector3.up);
+            }
+            worldTimerGo.SetActive(bomb.State != BombState.Exploded);
+        }
+
+        if (cameraTimerGo == null && Camera.main != null) BuildCameraTimer();
+        if (cameraTimerGo != null && bomb != null)
+            cameraTimerGo.SetActive(bomb.State != BombState.Exploded);
+
+        if (faceTimerGo != null && bomb != null)
+            faceTimerGo.SetActive(bomb.State != BombState.Exploded);
+
         // Parpadeo timer <10s en AMBOS HUDs
         if (timer == null || bomb == null) return;
         if (bomb.State == BombState.Running && timer.RemainingSeconds <= 10)
@@ -654,11 +907,17 @@ public class BombUI : MonoBehaviour
             float alpha = Mathf.Sin(Time.timeSinceLevelLoad * 7f) > 0f ? 1f : 0.28f;
             if (controllerTimeText != null) controllerTimeText.alpha = alpha;
             if (cubeTimeText != null) cubeTimeText.alpha = alpha;
+            if (worldTimeText != null) worldTimeText.alpha = alpha;
+            if (cameraTimeText != null) cameraTimeText.alpha = alpha;
+            if (faceTimeText != null) faceTimeText.alpha = alpha;
         }
         else
         {
             if (controllerTimeText != null) controllerTimeText.alpha = 1f;
             if (cubeTimeText != null) cubeTimeText.alpha = 1f;
+            if (worldTimeText != null) worldTimeText.alpha = 1f;
+            if (cameraTimeText != null) cameraTimeText.alpha = 1f;
+            if (faceTimeText != null) faceTimeText.alpha = 1f;
         }
     }
 }

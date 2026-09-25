@@ -1,0 +1,1 @@
+/Users/max_23/Documents/IHC-2026-09-15_15-11-19/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/4uq1253c/obj/arm64-v8a

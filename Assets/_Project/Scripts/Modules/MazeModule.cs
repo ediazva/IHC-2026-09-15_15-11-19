@@ -30,7 +30,7 @@ public class MazeModule : ModuleBase
         public const float BackThickness = 0.004f;
         public const float SheetX = 0.012f;       // lámina donde rueda la bolita
         public const float SheetThickness = 0.004f;
-        public const float DishX = 0.009f;        // cazoletas (trampa/FINAL) detrás de la lámina
+        public const float DishX = 0.016f;        // cazoletas (trampa/FINAL) en/frente de la lámina para que la bolita caiga
         public const float DishThickness = 0.004f;
         public const float DishSpan = 0.94f;      // fracción de celda de cada cazoleta
         public const float SlotDishY = 0.012f;    // platito de recepción sobre el hueco de entrada
@@ -50,7 +50,7 @@ public class MazeModule : ModuleBase
     public float wallHeight = 0.05f;
 
     [Tooltip("Radio de la bolita.")]
-    public float ballRadius = 0.0065f;
+    public float ballRadius = 0.011f;
 
     [Tooltip("Fija una semilla concreta para depurar/dificultad (useFixedSeed).")]
     public bool useFixedSeed;
@@ -59,7 +59,7 @@ public class MazeModule : ModuleBase
     public int fixedSeed = 42;
 
     [Header("Bolita")]
-    [Tooltip("Si está asignado, la bolita aparece al resolver ese módulo. Si no, aparece desde el inicio.")]
+    [Tooltip("Obsoleto: la bolita ahora aparece desde el inicio.")]
     public ModuleBase ballSource;
 
     /// <summary>Última semilla generada (para logs/debug).</summary>
@@ -80,6 +80,12 @@ public class MazeModule : ModuleBase
     private Renderer ballRenderer;
     private Transform ballBeacon;
     private float ballPlaneLocalX;
+    private float mazeMinY;
+    private float mazeMaxY;
+    private float mazeMinZ;
+    private float mazeMaxZ;
+
+    private float BallRollPlaneLocalX => Layout.SheetX + Layout.SheetThickness * 0.5f + ballRadius;
 
     private void Awake()
     {
@@ -88,26 +94,21 @@ public class MazeModule : ModuleBase
 
     private void OnEnable()
     {
-        if (ballSource != null) ballSource.OnSolved += OnBallSourceSolved;
     }
 
     private void OnDisable()
     {
-        if (ballSource != null) ballSource.OnSolved -= OnBallSourceSolved;
     }
 
     private void Start()
     {
         Rebuild(PickSeed());
-        if (ballSource == null)
-        {
-            GrantBall();
-        }
     }
 
     private void FixedUpdate()
     {
         ConstrainBallToMazePlane();
+        RecoverBallIfOutOfBounds();
     }
 
     public override void ResetModule()
@@ -116,10 +117,6 @@ public class MazeModule : ModuleBase
         StopAllCoroutines();
         ballGranted = false;
         Rebuild(PickSeed()); // laberinto distinto en cada reinicio de partida
-        if (ballSource == null)
-        {
-            GrantBall();
-        }
     }
 
     private int PickSeed()
@@ -128,18 +125,13 @@ public class MazeModule : ModuleBase
         return LastSeed;
     }
 
-    private void OnBallSourceSolved(ModuleBase source)
-    {
-        GrantBall();
-    }
-
     /// <summary>Entrega la bolita al laberinto (inicio o tras resolver módulo fuente).</summary>
     private void GrantBall()
     {
         if (ball == null || ballGranted) return;
         ballGranted = true;
-        PlaceBall(rewardLocalPos);
-        SFX.Play(SfxType.Solved, 0.5f);
+        PlaceBall(startMarker != null ? startMarker.localPosition : rewardLocalPos);
+        StartCoroutine(ReleaseBallAfterSpawn());
 
         if (ballBeacon != null) ballBeacon.gameObject.SetActive(true);
         OnBallGranted?.Invoke();
@@ -189,9 +181,20 @@ public class MazeModule : ModuleBase
     {
         if (ballRb == null) return;
         localPos.x = ballPlaneLocalX;
+        ballRb.isKinematic = true;
         ball.transform.localPosition = localPos;
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
+    }
+
+    private IEnumerator ReleaseBallAfterSpawn()
+    {
+        yield return new WaitForSeconds(0.35f);
+
+        if (ballRb == null || IsSolved) yield break;
+        ballRb.linearVelocity = Vector3.zero;
+        ballRb.angularVelocity = Vector3.zero;
+        ballRb.isKinematic = false;
     }
 
     private void ResetBallToStart()
@@ -204,6 +207,19 @@ public class MazeModule : ModuleBase
             ballRb.linearVelocity = Vector3.zero;
             ballRb.angularVelocity = Vector3.zero;
             ballRb.isKinematic = false;
+        }
+    }
+
+    private void RecoverBallIfOutOfBounds()
+    {
+        if (ball == null || ballRb == null || ballRb.isKinematic || startMarker == null || IsSolved) return;
+
+        Vector3 localPos = transform.InverseTransformPoint(ball.position);
+        float margin = Mathf.Max(cellSize, ballRadius * 3f);
+        if (localPos.y < mazeMinY - margin || localPos.y > mazeMaxY + margin ||
+            localPos.z < mazeMinZ - margin || localPos.z > mazeMaxZ + margin)
+        {
+            ResetBallToStart();
         }
     }
 
@@ -339,6 +355,10 @@ public class MazeModule : ModuleBase
         float topY = BoundaryY(n, n);
         float leftZ = BoundaryZ(n, 0);
         float rightZ = BoundaryZ(n, n);
+        mazeMinY = bottomY;
+        mazeMaxY = topY;
+        mazeMinZ = leftZ;
+        mazeMaxZ = rightZ;
         float slotLeft = CenterZ(n, data.start.c) - cellSize * 0.5f;
         float slotRight = CenterZ(n, data.start.c) + cellSize * 0.5f;
         float slotCenter = (slotLeft + slotRight) * 0.5f;
@@ -378,7 +398,7 @@ public class MazeModule : ModuleBase
         GameObject startGo = new GameObject("StartMarker");
         startGo.transform.SetParent(transform, false);
         startGo.transform.localPosition = new Vector3(
-            Layout.SheetX, CenterY(n, data.start.r), CenterZ(n, data.start.c));
+            BallRollPlaneLocalX, CenterY(n, Mathf.Max(0, data.start.r - 1)), CenterZ(n, data.start.c));
         startMarker = startGo.transform;
 
         // 8. Platito de recepción en la boca del hueco de entrada (la bolita cae aquí desde Simón).
@@ -408,6 +428,7 @@ public class MazeModule : ModuleBase
         ballBeacon.gameObject.SetActive(false);
 
         BuildBall(startGo.transform.localPosition);
+        GrantBall();
 
         Debug.Log($"[Bomba VR] Laberinto regenerado seed={seed} ({n}x{n}, {data.holes.Count} trampa(s))");
 
@@ -485,10 +506,7 @@ public class MazeModule : ModuleBase
         rb.isKinematic = false;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
-        ballPlaneLocalX = startLocalPos.x;
-
-        Isdk.Grab(ballGo, rb);
-        Isdk.HandGrab(ballGo, rb);
+        ballPlaneLocalX = BallRollPlaneLocalX;
 
         MazeBallListener listener = ballGo.AddComponent<MazeBallListener>();
         listener.owner = this;

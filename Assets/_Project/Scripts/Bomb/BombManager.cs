@@ -109,8 +109,7 @@ public class BombManager : MonoBehaviour
         holder.transform.SetParent(transform, false);
         holder.transform.localPosition = new Vector3(MazeModule.Layout.FaceOffsetX, 0f, 0f);
 
-        MazeModule maze = holder.AddComponent<MazeModule>();
-        maze.ballSource = GetComponentInChildren<SimonModule>(true);
+        holder.AddComponent<MazeModule>();
     }
 
     public void Begin()

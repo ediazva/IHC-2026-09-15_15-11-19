@@ -69,7 +69,8 @@ public static class Isdk
             clipped.InjectAllClippedPlaneSurface(plane, new IBoundsClipper[] { clipper });
         }
 
-        poke = go.AddComponent<PokeInteractable>();
+        if (poke == null)
+            poke = go.AddComponent<PokeInteractable>();
         poke.InjectAllPokeInteractable(clipped);
         return poke;
     }

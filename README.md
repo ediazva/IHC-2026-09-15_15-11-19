@@ -37,14 +37,20 @@ están resueltos y se pulsa el **botón de activación** (cara superior).
 
 Características implementadas:
 
-- Sala construida **en el editor** (mesa, suelo, luces, bomba y módulos
-  visibles antes de pulsar *Play*).
+- Habitación procedural de **2.2 × 2.2 m interiores**, con abertura de entrada,
+  paredes visibles y colliders generados desde las mismas medidas.
+- Mesa, bomba y paneles de módulos generados a escala de mundo Unity (1 unidad = 1 m).
 - **Temporizador** con cuenta regresiva y penalización por error.
 - **Sistema de strikes** (3 errores ⇒ explosión).
 - **Módulo de Cables** (conectar conector con la toma de su color).
-- **Módulo Simón** (repetir una secuencia de luces, por rondas).
+- **Módulo Simón** (repetir una secuencia de luces, por rondas; START pulsa
+  visualmente mientras espera que lo toquen).
+- **Módulo de pilas**: encontrar tres celdas de color en la habitación, agarrarlas
+  con Meta ISDK y encajarlas en los alojamientos correspondientes de la bomba.
 - **Módulo Laberinto** (cara derecha `+X`): laberinto de canicas físico que se
   resuelve **inclinando todo el cubo**; se regenera distinto en cada partida.
+- **Evento aleatorio sin texto**: el cubo muestra el color objetivo; el jugador
+  debe recordarlo, buscar el botón del mismo color en una pared y tocarlo.
 - **HUD** en mundo con tiempo, estado, errores y feedback.
 - **Audio 100 % procedural** (generado por código, sin ficheros de audio).
 - Soporte para **manos (hand tracking)** y para probar **sin visor** con el
@@ -121,6 +127,8 @@ El **XR Interaction Simulator** y el **Meta XR Simulator** no deben convivir
 | Mover el cubo | **Pellizca** (pulgar + índice) o **cierra la mano** sobre el cuerpo |
 | Conectar un cable | Agarra el **mango** de color y suéltalo sobre la **toma** de su color |
 | Jugar al Simón | Pulsa **START** (cara izquierda) y luego repite la secuencia en la rejilla 3×3 |
+| Módulo de pilas | Explora la habitación, agarra las tres pilas y encájalas en los alojamientos del color correspondiente |
+| Evento de color | Recuerda el color que emite el cubo, explora las paredes y toca el botón correspondiente; el evento no muestra instrucciones escritas |
 | Jugar al Laberinto | Resuelve primero **Simón** (regala la bolita), introdúcela por el hueco *AQUÍ INTRODUCE LA BOLITA* (cara `+X`) y **inclina el cubo** para llevarla al hueco del *FINAL* |
 | Desarmar la bomba | Cuando todo esté resuelto, pulsa el **botón rojo** de la cara superior |
 | Reiniciar partida | Botón **R** de la escena o tecla **`R`** |
@@ -234,7 +242,7 @@ agarras y lo mueves, las caras se mueven con él.
   Si se te hace difícil agarrar, sube `stub.transform.localScale` y el
   `CapsuleCollider` en `CablesModule.CreateCable`.
 - **Conectar**: al **soltar**, si el plug o el mango queda a menos de
-  `SnapDistance` (0.24 m) de una toma, se pega: misma toma = conecta;
+  `SnapDistance` (0.10 m) de una toma, se pega: misma toma = conecta;
   distinta = strike. Para hacerlo más fácil/fiable sube `SnapDistance`.
 
 Parámetros en `CablesModule.Layout` (ver tabla en *Parámetros configurables*).
@@ -254,7 +262,7 @@ Parámetros en `CablesModule.Layout` (ver tabla en *Parámetros configurables*).
 ### Cara derecha `+X` — **LABERINTO** (canicas, inclinar el cubo)
 
 Laberinto de canicas tipo juguete de madera, **incrustado en la cara derecha**
-(`Layout.FaceOffsetX = +0.306`). Se juega **agarrando e inclinando todo el cubo**:
+(`Layout.FaceOffsetX = +0.206`). Se juega **agarrando e inclinando todo el cubo**:
 la bolita rueda por el tablero.
 
 - **Generación**: cada inicio de partida (y cada `ResetModule`) regenera un
@@ -262,24 +270,37 @@ la bolita rueda por el tablero.
   fijar una) con el generador propio `MazeSpiralGenerator` (backtracking
   recursivo / DFS, siempre resoluble).
   - Paredes con `BoxCollider`, sin `Rigidbody`: el peso físico lo da la bolita.
-- **Bolita**: la regala **Simón** al resolverse (campo `ballSource`). Aparece
-  agarrable en el platito del hueco de entrada (`MazeSlotDish`), etiquetado
-  **`AQUÍ INTRODUCE LA BOLITA`**. Se agarra con la mano o el mando
-  (`Isdk.Grab` + `Isdk.HandGrab`).
-- **Meta / trampas**: la meta es la **celda más lejana** por BFS (siempre
-  resoluble) y hay **1–2 celdas trampa** intermedias. Ambas son cazoletas
-  huecas detrás de la lámina:
-  - Bolita en el **hueco FINAL** (`MazeGoalDish`, verde) ⇒ `Solve()`.
-  - Bolita en una **trampa** (`MazeHoleDish`, roja) ⇒ `AddStrike()` y vuelve a
-    la celda inicial.
-- **Extras**: embudo y guías visuales hacia el hueco, físicas de rodadura
-  (fricción alta, sin rebote), `Rigidbody.CollisionDetectionMode.Continuous`.
-- La bolita se crea **inactiva** hasta que Simón se resuelve
-  (`OnSolved → GrantBall`).
+- **Bolita**: aparece en la entrada al iniciar el módulo y se agarra con la mano
+  o el mando (`Isdk.Grab` + `Isdk.HandGrab`).
+- **Objetivo único**: la celda más lejana por BFS aparece marcada con una
+  cazoleta verde (`MazeGoalDish`); llegar a ella resuelve el módulo. No hay hoyos
+  rojos ni trampas.
+- **Extras**: aceleración de gravedad proyectada sobre el tablero con
+  `tiltSensitivity` ajustable, CCD y recuperación si la bolita sale del área.
 
 > El generador del asset importado **MazeGen (Goldor)** se revisó y se descartó:
 > no genera colliders (solo prefabs decorativos) y los prefabs demo no vinieron.
 > El generador propio evita cualquier dependencia de assets.
+
+### Cara trasera `−Z` — **PILAS** (búsqueda y colocación)
+
+- Tres pilas agarrables (roja, azul y amarilla) aparecen en tres ubicaciones
+  aleatorias entre soportes seguros de las paredes.
+- Recoge cada pila con la mano o el mando (Meta Interaction SDK) y encájala en
+  el alojamiento del mismo color en la cara trasera de la bomba.
+- Una colocación de color incorrecto devuelve la pila a su soporte y añade un
+  strike. Las pilas no siguen a la bomba cuando se agarra o se inclina; una pila
+  encajada queda fija y deja de ser agarrable.
+
+### Evento aleatorio de color (sin instrucciones escritas)
+
+- Solo ocurre durante `BombState.Running`, con intervalo aleatorio configurable.
+- El cubo emite el color objetivo; los botones de pared permanecen con sus
+  colores normales para que el jugador tenga que recordarlo y buscarlos.
+- La vista se atenúa gradualmente mediante URP. Un botón equivocado aplica una
+  penalización pero no despeja el evento; el timeout penaliza y deja otra
+  oportunidad. Solo el botón correcto aclara la vista y añade tiempo, salvo que
+  la partida termine por victoria o explosión.
 
 ### HUD (flotante sobre el cubo)
 
@@ -354,18 +375,26 @@ del cubo**.
 
 | Campo | Valor | Descripción |
 |---|---|---|
-| `gridSize` | 5 | Laberinto `N×N` celdas (5 ≈ tablero de 15 cm) |
+| `gridSize` | 10 | Laberinto `N×N` celdas |
 | `cellSize` | 0.030 m | Tamaño de cada celda |
-| `wallThickness` | 0.008 m | Grosor de las paredes |
+| `wallThickness` | 0.012 m | Grosor de las paredes |
 | `wallHeight` | 0.050 m | Altura de las paredes sobre la lámina |
-| `ballRadius` | 0.0065 m | Radio de la bolita |
+| `ballRadius` | 0.008 m | Radio de la bolita |
 | `useFixedSeed` | off | Fija la semilla para depurar/dificultad |
 | `fixedSeed` | 42 | Semilla usada con `useFixedSeed` |
 | `ballSource` | Module_Simon | Módulo que regala la bolita al resolverse |
 
 Medidas físicas del módulo en `MazeModule.Layout` (constantes de código):
-`FaceOffsetX 0.306`, `BackX 0.004`, `SheetX 0.012` (lámina de rodadura),
-`DishX 0.009` (cazoletas meta/trampa), `SlotDishY 0.012` (platito de recepción).
+`FaceOffsetX 0.206`, `BackX 0.004`, `SheetX 0.012` (lámina de rodadura),
+`DishX 0.016` (cazoletas meta/trampa), `SlotDishY 0.012` (platito de recepción).
+
+### Módulo de pilas y evento de color
+
+El módulo de pilas usa tres colores (rojo, azul y amarillo), tres recogibles y
+soportes distribuidos aleatoriamente dentro de la habitación. El evento de color
+usa los campos de `HarassmentEvent`: intervalo, tiempo de reacción, bonus,
+penalizaciones y límite de encadenamientos. La habitación se configura en
+`BombRoomSetup.BuildRoomWalls` (ancho y profundidad interiores: 2.2 m).
 
 ---
 
@@ -385,7 +414,7 @@ Constantes en `Assets/_Project/Scripts/Modules/CablesModule.cs` (clase
 | `PlugRadius` | 0.04 | Radio de referencia del plug |
 | `SocketSize` | 0.09 | Tamaño (escala) de cada toma |
 | `CordRadius` | 0.012 | Radio del cordón (LineRenderer) |
-| `SnapDistance` | **0.24** | **Facilidad para conectar**: al soltar, si plug o mango está a menos de esta distancia (en metros) de una toma, se pega a ella (acierto si es su color). Subirlo = más fácil |
+| `SnapDistance` | **0.10** | Distancia máxima de la clavija a una toma para conectar al soltar |
 | `LeftX` … `SocketSize` | | Se aplican en `CreateCable()` / `CreateSocket()` y en `Build()` |
 
 El mango en sí (también en `CreateCable`):

@@ -14,8 +14,8 @@ using UnityEngine;
 ///    resolverlo aparece en el platito del hueco de inserción. Se introduce por
 ///    el hueco etiquetado "AQUÍ INTRODUCE LA BOLITA".
 ///  * Se juega AGARRANDO E INCLINANDO TODO EL CUBO: la bolita rueda por el
-///    tablero. Si entra en una celda trampa (Hole) -> AddStrike() y vuelve a la
-///    celda inicial. Si cae en el agujero del FINAL (Goal) -> Solve().
+///    tablero. El diseño actual solo tiene una cazoleta verde de destino
+///    (Goal); no se generan hoyos rojos ni trampas intermedias.
 ///
 /// Cada inicio de partida regenera el laberinto con una semilla aleatoria
 /// (useFixedSeed permite fijarla para reproducibilidad/dificultad).
@@ -43,14 +43,18 @@ public class MazeModule : ModuleBase
     [Tooltip("Tamaño de cada celda en metros.")]
     public float cellSize = 0.03f;
 
-        [Tooltip("Grosor de las paredes.")]
-        public float wallThickness = 0.012f;
+    [Tooltip("Grosor de las paredes.")]
+    public float wallThickness = 0.012f;
 
     [Tooltip("Altura de las paredes sobre la lámina.")]
     public float wallHeight = 0.05f;
 
-        [Tooltip("Radio de la bolita.")]
-        public float ballRadius = 0.008f;
+    [Tooltip("Radio de la bolita.")]
+    public float ballRadius = 0.008f;
+
+    [Header("Sensibilidad física")]
+    [Tooltip("Multiplicador de aceleración de la gravedad sobre el tablero; 1 es física normal.")]
+    [Range(0.5f, 3f)] public float tiltSensitivity = 1.7f;
 
     [Tooltip("Fija una semilla concreta para depurar/dificultad (useFixedSeed).")]
     public bool useFixedSeed;
@@ -79,6 +83,7 @@ public class MazeModule : ModuleBase
     private Renderer slotDishRenderer;
     private Renderer ballRenderer;
     private Transform ballBeacon;
+    private PhysicsMaterial ballPhysicsMaterial;
     private float ballPlaneLocalX;
     private float mazeMinY;
     private float mazeMaxY;
@@ -107,6 +112,7 @@ public class MazeModule : ModuleBase
 
     private void FixedUpdate()
     {
+        ApplyTiltAcceleration();
         ConstrainBallToMazePlane();
         RecoverBallIfOutOfBounds();
     }
@@ -182,7 +188,7 @@ public class MazeModule : ModuleBase
         if (ballRb == null) return;
         localPos.x = ballPlaneLocalX;
         ballRb.isKinematic = true;
-        ball.transform.localPosition = localPos;
+        ball.transform.position = transform.TransformPoint(localPos);
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
     }
@@ -194,6 +200,10 @@ public class MazeModule : ModuleBase
         if (ballRb == null || IsSolved) yield break;
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
+        // A dynamic Rigidbody must not remain a transform child of the moving,
+        // kinematic bomb. Its world pose stays put until it collides with the
+        // bomb-mounted maze geometry and is steered by projected gravity.
+        ball.SetParent(null, true);
         ballRb.isKinematic = false;
     }
 
@@ -230,24 +240,30 @@ public class MazeModule : ModuleBase
         Vector3 localPos = transform.InverseTransformPoint(ball.position);
         float xError = localPos.x - ballPlaneLocalX;
 
-        if (Mathf.Abs(xError) > 0.002f)
+        if (Mathf.Abs(xError) > 0.004f)
         {
             localPos.x = ballPlaneLocalX;
             ballRb.MovePosition(transform.TransformPoint(localPos));
         }
 
         Vector3 localVelocity = transform.InverseTransformDirection(ballRb.linearVelocity);
-        if (Mathf.Abs(localVelocity.x) > 0.01f)
+        if (Mathf.Abs(localVelocity.x) > 0.005f)
         {
-            localVelocity.x *= 0.5f;
+            localVelocity.x = 0f;
             ballRb.linearVelocity = transform.TransformDirection(localVelocity);
         }
     }
 
+    private void ApplyTiltAcceleration()
+    {
+        if (ball == null || ballRb == null || ballRb.isKinematic || IsSolved) return;
+
+        Vector3 gravityAlongBoard = Vector3.ProjectOnPlane(Physics.gravity, transform.right);
+        ballRb.AddForce(gravityAlongBoard * Mathf.Max(0.1f, tiltSensitivity), ForceMode.Acceleration);
+    }
+
     /// <summary>
-    /// Evento de disparo de la bolita (lo reenvía MazeBallListener). Goal &
-    /// Hole funcionan por nombre de la cazoleta y por tag ("Goal"/"Hole") con
-    /// fallback por nombre si las etiquetas no están definidas en el proyecto.
+    /// Trigger de la bolita reenviado por MazeBallListener; solo existe el goal verde.
     /// </summary>
     public void NotifyBallTrigger(Collider other)
     {
@@ -258,12 +274,6 @@ public class MazeModule : ModuleBase
             Solve();
             if (ballRb != null) ballRb.isKinematic = true;
             SFX.Play(SfxType.Solved, 0.8f);
-        }
-        else if (IsTriggerOf(other, "Hole", "MazeHole"))
-        {
-            AddStrike();
-            SFX.Play(SfxType.Denied, 0.6f);
-            ResetBallToStart();
         }
     }
 
@@ -323,7 +333,7 @@ public class MazeModule : ModuleBase
         {
             for (int c = 0; c < n; c++)
             {
-                if (IsGoalOrHole(data, r, c)) continue;
+                if (IsGoalCell(data, r, c)) continue;
                 Fx.Cube(floorGo.transform, "MazeTile",
                     new Vector3(Layout.SheetX, CenterY(n, r), CenterZ(n, c)),
                     new Vector3(Layout.SheetThickness, cellSize, cellSize), floorColor);
@@ -398,10 +408,8 @@ public class MazeModule : ModuleBase
         guideR.localRotation = Quaternion.Euler(0f, 0f, -slope);
         Fx.StripCollider(guideR.gameObject);
 
-        // 6. Cazoletas: meta (Goal) y trampas (Hole) como huecos con trigger.
-        CreateDish(n, data.goal.r, data.goal.c, true);
-        for (int i = 0; i < data.holes.Count; i++)
-            CreateDish(n, data.holes[i].r, data.holes[i].c, false);
+        // 6. Única cazoleta verde de destino. No se construyen hoyos rojos.
+        CreateGoalDish(n, data.goal.r, data.goal.c);
 
         // 7. Marcador del punto de inicio (celda inicial) para el reset de la bolita.
         GameObject startGo = new GameObject("StartMarker");
@@ -464,13 +472,9 @@ public class MazeModule : ModuleBase
         }
     }
 
-    private static bool IsGoalOrHole(MazeSpiralGenerator.MazeData data, int r, int c)
+    private static bool IsGoalCell(MazeSpiralGenerator.MazeData data, int r, int c)
     {
-        if (r == data.goal.r && c == data.goal.c) return true;
-        for (int i = 0; i < data.holes.Count; i++)
-            if (data.holes[i].r == r && data.holes[i].c == c)
-                return true;
-        return false;
+        return r == data.goal.r && c == data.goal.c;
     }
 
     private float CenterY(int n, int r) => (r - (n - 1) * 0.5f) * cellSize;
@@ -478,11 +482,11 @@ public class MazeModule : ModuleBase
     private float BoundaryY(int n, int r) => (r - n * 0.5f) * cellSize;
     private float BoundaryZ(int n, int c) => (c - n * 0.5f) * cellSize;
 
-    /// <summary>Cazoleta "hueco" en una celda (meta o trampa) con collider trigger.</summary>
-    private void CreateDish(int n, int r, int c, bool goal)
+    /// <summary>Única cazoleta verde de destino con collider trigger.</summary>
+    private void CreateGoalDish(int n, int r, int c)
     {
-        string name = goal ? "MazeGoalDish" : "MazeHoleDish";
-        Color color = goal ? BombRoomPalette.Colors[4] : BombRoomPalette.Colors[0];
+        const string name = "MazeGoalDish";
+        Color color = BombRoomPalette.Colors[4];
 
         GameObject dish = GameObject.CreatePrimitive(PrimitiveType.Cube);
         dish.name = name;
@@ -490,12 +494,12 @@ public class MazeModule : ModuleBase
         float span = cellSize * Layout.DishSpan;
         dish.transform.localPosition = new Vector3(Layout.DishX, CenterY(n, r), CenterZ(n, c));
         dish.transform.localScale = new Vector3(Layout.DishThickness, span, span);
-        dish.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color, goal ? 0.6f : 0.25f);
+        dish.GetComponent<Renderer>().sharedMaterial = Fx.Lit(color, 1.6f);
 
         BoxCollider col = dish.GetComponent<BoxCollider>();
         col.isTrigger = true;
 
-        SetTagSafe(dish, goal ? "Goal" : "Hole");
+        SetTagSafe(dish, "Goal");
     }
 
     private void BuildBall(Vector3 startLocalPos)
@@ -508,7 +512,7 @@ public class MazeModule : ModuleBase
         ballGo.GetComponent<Renderer>().sharedMaterial = Fx.Lit(BombRoomPalette.Colors[1], 0.3f);
 
         SphereCollider col = ballGo.GetComponent<SphereCollider>();
-        col.material = new PhysicsMaterial("Marble")
+        ballPhysicsMaterial = new PhysicsMaterial("Marble")
         {
             dynamicFriction = 0.15f,
             staticFriction = 0.15f,
@@ -516,14 +520,15 @@ public class MazeModule : ModuleBase
             frictionCombine = PhysicsMaterialCombine.Minimum,
             bounceCombine = PhysicsMaterialCombine.Minimum,
         };
+        col.material = ballPhysicsMaterial;
 
         Rigidbody rb = ballGo.AddComponent<Rigidbody>();
         rb.mass = 0.02f;
         rb.linearDamping = 0.1f;
         rb.angularDamping = 0.05f;
-        rb.useGravity = true;
+        rb.useGravity = false;
         rb.isKinematic = false;
-        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         ballPlaneLocalX = BallRollPlaneLocalX;
 
@@ -557,6 +562,10 @@ public class MazeModule : ModuleBase
 
     private void ClearChildren()
     {
+        GameObject oldBall = ball != null ? ball.gameObject : null;
+        if (oldBall != null && oldBall.transform.parent == transform)
+            oldBall.transform.SetParent(null, true);
+
         GameObject[] children = new GameObject[transform.childCount];
         for (int i = 0; i < transform.childCount; i++)
             children[i] = transform.GetChild(i).gameObject;
@@ -565,6 +574,17 @@ public class MazeModule : ModuleBase
             if (go == null) continue;
             if (Application.isPlaying) Destroy(go);
             else DestroyImmediate(go);
+        }
+        if (oldBall != null)
+        {
+            if (Application.isPlaying) Destroy(oldBall);
+            else DestroyImmediate(oldBall);
+        }
+        if (ballPhysicsMaterial != null)
+        {
+            if (Application.isPlaying) Destroy(ballPhysicsMaterial);
+            else DestroyImmediate(ballPhysicsMaterial);
+            ballPhysicsMaterial = null;
         }
         startMarker = null;
         ball = null;
@@ -582,8 +602,8 @@ public class MazeModule : ModuleBase
         }
         catch (UnityException)
         {
-            // La etiqueta no está definida en el proyecto: la detección funciona
-            // igual por el nombre de la cazoleta (MazeGoalDish / MazeHoleDish).
+            // La etiqueta Goal no está definida: la detección funciona también
+            // por el nombre fijo MazeGoalDish.
         }
     }
 }

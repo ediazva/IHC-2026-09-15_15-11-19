@@ -43,6 +43,9 @@ public class BombUI : MonoBehaviour
     private InteractableState hgState = InteractableState.Normal;
     private InteractableState gState = InteractableState.Normal;
     private bool flashActive;
+    private bool eventGlowActive;
+    private Color eventGlowColor;
+    private float eventGlowIntensity;
 
     private readonly List<Material> ledMats = new List<Material>();
     private Color bombBaseEmission;
@@ -211,6 +214,50 @@ public class BombUI : MonoBehaviour
         Unsubscribe();
     }
 
+    public void SetGlowColor(Color color, float intensity = 1.5f)
+    {
+        if (bombBodyRenderer == null) return;
+        bombBodyRenderer.sharedMaterial.EnableKeyword("_EMISSION");
+        bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", color * intensity);
+    }
+
+    public void SetGlowOff()
+    {
+        if (bombBodyRenderer == null) return;
+        bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", Color.black);
+    }
+
+    public void SetEventGlow(Color color, float intensity = 2f)
+    {
+        eventGlowActive = true;
+        eventGlowColor = color;
+        eventGlowIntensity = intensity;
+        ApplyEventGlow();
+    }
+
+    public void ClearEventGlow()
+    {
+        eventGlowActive = false;
+        UpdateBodyHighlight();
+    }
+
+    private void ApplyEventGlow()
+    {
+        if (bombBodyRenderer == null) return;
+        bombBodyRenderer.sharedMaterial.EnableKeyword("_EMISSION");
+        bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", eventGlowColor * eventGlowIntensity);
+    }
+
+    public void SetVignette(float intensity)
+    {
+        var volume = FindAnyObjectByType<UnityEngine.Rendering.Volume>();
+        if (volume == null || volume.profile == null) return;
+        if (volume.profile.TryGet(out UnityEngine.Rendering.Universal.Vignette vignette))
+        {
+            vignette.intensity.Override(intensity);
+        }
+    }
+
     // ------------------------------------------------------------------ Timer
 
     private void OnTimeChanged(float timeLeft)
@@ -348,6 +395,11 @@ public class BombUI : MonoBehaviour
     private void UpdateBodyHighlight()
     {
         if (bombBodyRenderer == null || flashActive) return;
+        if (eventGlowActive)
+        {
+            ApplyEventGlow();
+            return;
+        }
         if (bomb != null && bomb.State != BombState.Running)
         {
             bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", bombBaseEmission);
@@ -450,6 +502,7 @@ public class BombUI : MonoBehaviour
         if (cameraTimeText != null) cameraTimeText.text = mmss;
         if (faceTimeText != null) faceTimeText.text = mmss;
         flashActive = false;
+        eventGlowActive = false;
         hgState = InteractableState.Normal;
         gState = InteractableState.Normal;
         UpdateBodyHighlight();

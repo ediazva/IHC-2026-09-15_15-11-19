@@ -107,8 +107,8 @@ public static class MazeSpiralGenerator
         // laberinto es siempre resoluble y el recorrido no es trivial.
         data.goal = FarthestCell(data, rng);
 
-        // Celdas trampa: 1-2 celdas intermedias, nunca la meta ni vecinas del inicio.
-        // PickHoles(ref data, seed); // Delete this
+        // The current design has only the green destination; no red trap dishes.
+        data.holes.Clear();
 
         return data;
     }
@@ -185,36 +185,4 @@ public static class MazeSpiralGenerator
         return best;
     }
 
-    private static void PickHoles(ref MazeData data, int seed)
-    {
-        var rng = new System.Random(seed ^ 0x5A17);
-        data.holes.Clear();
-
-        int[,] dist = BfsDistances(data, data.start);
-
-        List<Cell> candidates = new List<Cell>();
-        for (int r = 0; r < data.n; r++)
-        {
-            for (int c = 0; c < data.n; c++)
-            {
-                if (dist[r, c] == int.MaxValue) continue;
-                if (r == data.start.r && c == data.start.c) continue;
-                if (r == data.goal.r && c == data.goal.c) continue;
-                if (dist[r, c] < 2) continue; // no adyacentes al inicio
-                if (dist[r, c] == dist[data.goal.r, data.goal.c]) continue;
-                candidates.Add(new Cell { r = r, c = c });
-            }
-        }
-
-        // Mezcla determinista (Fisher-Yates con la semilla).
-        for (int i = candidates.Count - 1; i > 0; i--)
-        {
-            int j = rng.Next(i + 1);
-            (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
-        }
-
-        int count = data.n >= 6 ? 2 : 1;
-        for (int i = 0; i < candidates.Count && data.holes.Count < count; i++)
-            data.holes.Add(candidates[i]);
-    }
 }

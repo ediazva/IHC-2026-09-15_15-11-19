@@ -69,6 +69,8 @@ public class SimonModule : ModuleBase
     private Coroutine playback;
     private PokeInteractable startPoke;
     private Action<InteractableStateChangeArgs> startHandler;
+    private Renderer startRenderer;
+    private Material startMaterial;
     private bool started;
     private bool acceptingInput;
     private int inputIndex;
@@ -111,6 +113,7 @@ public class SimonModule : ModuleBase
 
         if (startPoke != null && startHandler != null)
             startPoke.WhenStateChanged -= startHandler;
+        if (startMaterial != null) Destroy(startMaterial);
     }
 
     public override void ResetModule()
@@ -147,10 +150,29 @@ public class SimonModule : ModuleBase
             button.gameObject.SetActive(true);
         }
 
+        if (startButton == null)
+        {
+            Transform foundStart = transform.Find("SimonStartButton");
+            if (foundStart != null) startButton = foundStart.gameObject;
+        }
+
         if (startButton != null)
         {
+            startRenderer = startButton.GetComponent<Renderer>();
+            if (startRenderer != null)
+            {
+                startMaterial = startRenderer.sharedMaterial != null
+                    ? new Material(startRenderer.sharedMaterial)
+                    : Fx.Lit(new Color(0.13f, 0.72f, 0.38f), 0.3f);
+                startRenderer.sharedMaterial = startMaterial;
+                startMaterial.EnableKeyword("_EMISSION");
+            }
             startPoke = Isdk.Poke(startButton, OutwardOf(startButton));
             startHandler = Isdk.Bind(startPoke, PressStart, null, startHandler);
+        }
+        else
+        {
+            Debug.LogError("[Simon] SimonStartButton reference is missing.", this);
         }
     }
 
@@ -312,6 +334,13 @@ public class SimonModule : ModuleBase
 
             button.material.EnableKeyword("_EMISSION");
             button.material.SetColor("_EmissionColor", button.color * (lit ? 4f : 0f));
+        }
+
+        if (startMaterial != null)
+        {
+            bool ready = !IsSolved && !started && bomb != null && bomb.State == BombState.Running;
+            float pulse = ready ? 1.3f + 0.8f * (0.5f + 0.5f * Mathf.Sin(Time.time * 4f)) : 0.15f;
+            startMaterial.SetColor("_EmissionColor", new Color(0.13f, 0.72f, 0.38f) * pulse);
         }
     }
 }

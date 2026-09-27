@@ -5,25 +5,13 @@ using UnityEngine.SceneManagement;
 
 namespace VRInteractionPrototype.Editor
 {
-    /// <summary>
-    /// Coloca automaticamente los modelos importados al cargar el Editor:
-    /// Lampara separada y cuarto en el origen.
-    /// Solo actua en escenas con objeto "Table" (BombRoom) y solo crea
-    /// lo que falta. No borra ni mueve nada existente.
-    /// </summary>
-    [InitializeOnLoad]
+    /// <summary>Optional, explicit placement of the decorative lamp only.</summary>
     public static class AutoPlaceModels
     {
         private const string LampBlendPath = "Assets/_Project/Models/TriangleLamp/triangle_lamp.blend";
         private const string LampFbxPath = "Assets/_Project/Models/TriangleLamp/triangle_lamp.fbx";
-        private const string RoomPath = "Assets/_Project/Models/HeadquartersRoom/Headquarters_Room.fbx";
-
-        static AutoPlaceModels()
-        {
-            EditorApplication.delayCall += RunOnce;
-        }
-
-        private static void RunOnce()
+        [MenuItem("Bomba VR/Agregar lámpara decorativa opcional")]
+        public static void RunOnce()
         {
             if (Application.isPlaying) return;
             if (EditorApplication.isCompiling) return;
@@ -33,7 +21,6 @@ namespace VRInteractionPrototype.Editor
             if (table == null) return; // No es la escena objetivo.
 
             bool changed = false;
-            changed |= EnsureRoom();
             changed |= EnsureLampOnTable(table);
 
             if (changed)
@@ -42,18 +29,6 @@ namespace VRInteractionPrototype.Editor
                 EditorSceneManager.SaveScene(scene);
                 Debug.Log("[AutoPlaceModels] Modelos colocados y escena guardada.");
             }
-        }
-
-        private static bool EnsureRoom()
-        {
-            if (GameObject.Find("HeadquartersRoom") != null) return false;
-            GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(RoomPath);
-            if (asset == null) { Debug.LogWarning("[AutoPlaceModels] Cuarto no importado aun: " + RoomPath); return false; }
-            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(asset);
-            instance.name = "HeadquartersRoom";
-            instance.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
-            Debug.Log("[AutoPlaceModels] HeadquartersRoom instanciado en el origen.");
-            return true;
         }
 
         private static bool EnsureLampOnTable(GameObject table)

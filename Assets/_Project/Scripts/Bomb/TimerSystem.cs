@@ -36,6 +36,8 @@ public class TimerSystem : MonoBehaviour
         if (IsRunning) return;
         if (TimeLeft <= 0f) TimeLeft = startSeconds;
         IsRunning = true;
+        lastWholeSecond = RemainingSeconds;
+        NotifyChanged();
     }
 
     public void StopTimer()
@@ -62,6 +64,14 @@ public class TimerSystem : MonoBehaviour
             StopTimer();
             OnTimeout?.Invoke();
         }
+    }
+
+    /// <summary>Suma segundos al temporizador (usado por bonus del evento de acoso).</summary>
+    public void AddTime(float seconds)
+    {
+        if (!IsRunning) return;
+        TimeLeft += Mathf.Abs(seconds);
+        NotifyChanged();
     }
 
     private void Update()

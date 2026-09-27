@@ -32,7 +32,7 @@ public class CablesModule : ModuleBase
         public const float PlugRadius = 0.034f;
         public const float SocketSize = 0.074f;
         public const float CordRadius = 0.009f;
-        public const float SnapDistance = 0.24f;
+        public const float SnapDistance = 0.10f;
     }
 
     /// <summary>Colores del puzzle: rojo, azul y amarillo.</summary>
@@ -345,7 +345,6 @@ public class CablesModule : ModuleBase
         if (cable == null || cable.connected) return;
 
         Vector3 plugPos = cable.plug.transform.position;
-        Vector3 stubPos = cable.stub.transform.position;
         CableState nearest = null;
         float bestDistance = Layout.SnapDistance;
 
@@ -353,9 +352,9 @@ public class CablesModule : ModuleBase
         {
             if (other.socket == null) continue;
             Vector3 sockPos = other.socket.transform.position;
-            float dPlug = Vector3.Distance(plugPos, sockPos);
-            float dStub = Vector3.Distance(stubPos, sockPos);
-            float d = Mathf.Min(dPlug, dStub);
+            // Snap according to the connector tip only. The handle can pass
+            // near an unrelated socket while the plug itself is still far away.
+            float d = Vector3.Distance(plugPos, sockPos);
             if (d < bestDistance)
             {
                 bestDistance = d;

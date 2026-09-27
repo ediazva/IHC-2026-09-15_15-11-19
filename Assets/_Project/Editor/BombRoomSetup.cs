@@ -66,18 +66,74 @@ public static class BombRoomSetup
 
         EnsureMaterialsFolder();
 
+        GameObject importedRoom = GameObject.Find("HeadquartersRoom");
+        if (importedRoom != null) Object.DestroyImmediate(importedRoom);
+
         GameObject root = new GameObject("BombRoom");
 
         EnsureLighting();
-        EnsureGround(root);
+        BuildRoomWalls(root);
 
         Transform tableTop = BuildTable(root).transform.Find("Top");
         TablePlacement table = GetTablePlacement(root, tableTop);
         BuildBomb(root, table);
         BuildResetButton(root, table.TopY);
+        BuildHarassmentEvent(root);
 
         EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
         Debug.Log("<color=#7CFC00>[Bomba VR] Sala construida en el editor. Revisa en la ventana Scene: mesa, bomba, cables, HUD y botón R. Pulsa Play para jugar.</color>");
+    }
+
+    [MenuItem("Bomba VR/Reconstruir sala con paredes y evento de acoso", false, 2)]
+    public static void RebuildRoomWithWalls()
+    {
+        if (!Application.isBatchMode && !EditorUtility.DisplayDialog(
+                "Reconstruir habitación Bomba VR",
+                "Esto reemplazará el objeto BombRoom y sus hijos por la sala procedural interior 2.2x2.2m, módulos, pilas y evento. Los demás objetos raíz se conservan. ¿Continuar?",
+                "Reconstruir", "Cancelar"))
+            return;
+
+        // Always rebuild the project's real scene, not Unity's temporary empty
+        // scene (which made SaveScene open a dialog and silently lose changes in
+        // batch mode).
+        if (SceneManager.GetActiveScene().path != ScenePath)
+        {
+            if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                return;
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        }
+
+        GameObject existingRoot = null;
+        foreach (GameObject go in SceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            if (go != null && go.name == "BombRoom") { existingRoot = go; break; }
+        }
+
+        if (existingRoot != null)
+            Object.DestroyImmediate(existingRoot);
+
+        GameObject oldHeadquarters = GameObject.Find("HeadquartersRoom");
+        if (oldHeadquarters != null) Object.DestroyImmediate(oldHeadquarters);
+
+        GameObject oldLamp = GameObject.Find("TriangleLamp");
+        if (oldLamp != null) Object.DestroyImmediate(oldLamp);
+
+        EnsureMaterialsFolder();
+
+        GameObject root = new GameObject("BombRoom");
+
+        EnsureLighting();
+        BuildRoomWalls(root);
+
+        Transform tableTop = BuildTable(root).transform.Find("Top");
+        TablePlacement table = GetTablePlacement(root, tableTop);
+        BuildBomb(root, table);
+        BuildResetButton(root, table.TopY);
+        BuildHarassmentEvent(root);
+
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        EditorSceneManager.SaveScene(SceneManager.GetActiveScene(), ScenePath);
+        Debug.Log("<color=#7CFC00>[Bomba VR] Sala procedural interior 2.2x2.2m reconstruida, con módulo de pilas, botones y evento aleatorio.</color>");
     }
 
     [MenuItem("Bomba VR/Añadir módulo Simón a la bomba actual", false, 100)]
@@ -255,11 +311,28 @@ public static class BombRoomSetup
         GameObject table = new GameObject("Table");
         table.transform.SetParent(root.transform, false);
 
-        // Invisible placement anchor: the imported room already provides the
-        // visible table, so avoid generating a smaller duplicate inside it.
-        GameObject top = new GameObject("Top");
+        // Table is part of the generated room now; Top doubles as the visible
+        // tabletop and the placement reference for the bomb.
+        GameObject top = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        top.name = "Top";
         top.transform.SetParent(table.transform, false);
         top.transform.localPosition = new Vector3(0f, 0.74f, 0f);
+        top.transform.localScale = new Vector3(0.86f, 0.08f, 0.70f);
+        top.GetComponent<Renderer>().sharedMaterial = GetMaterial("Mat_TableTop", new Color(0.22f, 0.16f, 0.11f));
+
+        Material legs = GetMaterial("Mat_TableLegs", new Color(0.12f, 0.095f, 0.075f));
+        for (int x = -1; x <= 1; x += 2)
+        {
+            for (int z = -1; z <= 1; z += 2)
+            {
+                GameObject leg = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                leg.name = $"Leg_{(x < 0 ? "L" : "R")}_{(z < 0 ? "F" : "B")}";
+                leg.transform.SetParent(table.transform, false);
+                leg.transform.localPosition = new Vector3(x * 0.34f, 0.36f, z * 0.26f);
+                leg.transform.localScale = new Vector3(0.07f, 0.72f, 0.07f);
+                leg.GetComponent<Renderer>().sharedMaterial = legs;
+            }
+        }
 
         return table;
     }
@@ -311,7 +384,10 @@ public static class BombRoomSetup
 
         BombManager manager = bomb.AddComponent<BombManager>();
         manager.penaltyPerStrike = 35f;
-        manager.autoStart = false;
+        // Bomb is inactive while inside the intro box. Its Start runs when the
+        // reveal activates it, so the timer always starts as the bomb appears.
+        // PresentBoxReveal.Begin() remains safe/idempotent for the reveal path.
+        manager.autoStart = true;
 
         // La bomba se puede agarrar y girar para ver sus caras (solo manos).
         Rigidbody bombRb = bomb.AddComponent<Rigidbody>();
@@ -350,6 +426,14 @@ public static class BombRoomSetup
         mazeGo.transform.localPosition = new Vector3(MazeModule.Layout.FaceOffsetX, 0f, 0f);
         MazeModule maze = mazeGo.AddComponent<MazeModule>();
         maze.ballSource = simon;
+
+        // Battery puzzle uses the otherwise-free rear (-Z) face. Its loose
+        // pickups are parented to RoomWalls, never to the moving bomb.
+        GameObject batteryGo = new GameObject("Module_Batteries");
+        batteryGo.transform.SetParent(bomb.transform, false);
+        batteryGo.transform.localPosition = new Vector3(0f, 0f, -0.205f);
+        BatteryModule batteries = batteryGo.AddComponent<BatteryModule>();
+        batteries.roomWalls = root.transform.Find("Room")?.GetComponent<RoomWalls>();
 
         // --- HUD: texto flotando en el aire, justo delante-encima del cubo,
         //     completamente fuera del cuerpo para que se lea sin quedar
@@ -631,9 +715,9 @@ public static class BombRoomSetup
         startBtn.name = "SimonStartButton";
         startBtn.transform.SetParent(module.transform, false);
         startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.14f, 0f);
-        startBtn.transform.localScale = new Vector3(0.055f, 0.055f, 0.16f);
+        startBtn.transform.localScale = new Vector3(0.075f, 0.075f, 0.18f);
         startBtn.GetComponent<Renderer>().sharedMaterial =
-            GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.2f);
+            GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.4f);
 
         Isdk.Poke(startBtn, new Vector3(-1f, 0f, 0f));
 
@@ -776,17 +860,105 @@ public static class BombRoomSetup
         RenderSettings.ambientLight = new Color(0.28f, 0.3f, 0.34f);
     }
 
-    private static void EnsureGround(GameObject root)
+    private static void BuildRoomWalls(GameObject root)
     {
-        if (GameObject.Find("Ground") != null) return;
+        GameObject wallsGo = new GameObject("Room");
+        wallsGo.transform.SetParent(root.transform, false);
 
-        Material mat = GetMaterial("Mat_Ground", new Color(0.16f, 0.16f, 0.17f));
-        GameObject ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        ground.name = "Ground";
-        ground.transform.SetParent(root.transform, false);
-        ground.transform.localPosition = new Vector3(0f, 0f, 0f);
-        ground.transform.localScale = new Vector3(5f, 1f, 5f);
-        ground.GetComponent<Renderer>().sharedMaterial = mat;
+        RoomWalls walls = wallsGo.AddComponent<RoomWalls>();
+        walls.roomWidth = 2.2f;
+        walls.roomDepth = 2.2f;
+        walls.roomHeight = 2.4f;
+        walls.wallThickness = 0.10f;
+        walls.doorwayWidth = 0.80f;
+        walls.doorwayHeight = 2.05f;
+        walls.createCeiling = false;
+        walls.wallMaterial = GetMaterial("Mat_RoomWalls", new Color(0.24f, 0.27f, 0.31f));
+        walls.floorMaterial = GetMaterial("Mat_RoomFloor", new Color(0.12f, 0.14f, 0.17f));
+        walls.RebuildGeometry();
+    }
+
+    private static void BuildHarassmentEvent(GameObject root)
+    {
+        GameObject hudGo = root.transform.Find("Bomba/BombHUD")?.gameObject;
+        Renderer bombBodyRenderer = null;
+        if (hudGo != null)
+        {
+            BombUI hud = hudGo.GetComponent<BombUI>();
+            if (hud != null) bombBodyRenderer = hud.bombBodyRenderer;
+        }
+
+        GameObject wallsGo = root.transform.Find("Room")?.gameObject;
+        RoomWalls walls = wallsGo?.GetComponent<RoomWalls>();
+
+        GameObject buttonsGo = new GameObject("HarassmentButtons");
+        buttonsGo.transform.SetParent(root.transform, false);
+
+        HarassmentButton[] buttons = new HarassmentButton[3];
+        Color[] colors = { BombRoomPalette.Colors[0], BombRoomPalette.Colors[1], BombRoomPalette.Colors[4] };
+        string[] names = { "ROJO", "AZUL", "VERDE" };
+        int[] wallIndices = { 0, 1, 2 };
+
+        for (int i = 0; i < 3; i++)
+        {
+            GameObject btn = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            btn.name = $"HarassmentButton_{names[i]}";
+            btn.transform.SetParent(buttonsGo.transform, false);
+
+            if (walls != null && walls.TryGetButtonPose(wallIndices[i], 1.25f, 0f, 0.06f,
+                    out Vector3 position, out Vector3 inwardNormal))
+            {
+                btn.transform.position = position;
+                // The button's local +Z poke face points into the room.
+                btn.transform.rotation = Quaternion.LookRotation(inwardNormal, Vector3.up);
+            }
+            else
+            {
+                Debug.LogError($"[BombRoomSetup] No se pudo ubicar el botón {names[i]} sobre RoomWalls.");
+            }
+
+            btn.transform.localScale = new Vector3(0.16f, 0.16f, 0.06f);
+            btn.GetComponent<Renderer>().sharedMaterial = GetMaterial($"Mat_Harassment_{names[i]}", colors[i], emission: 0.15f);
+
+            HarassmentButton hb = btn.AddComponent<HarassmentButton>();
+            hb.buttonColor = colors[i];
+            hb.buttonName = names[i];
+            hb.buttonRenderer = btn.GetComponent<Renderer>();
+
+            buttons[i] = hb;
+        }
+
+        GameObject volGo = new GameObject("GlobalVolume");
+        volGo.transform.SetParent(root.transform, false);
+        var volume = volGo.AddComponent<UnityEngine.Rendering.Volume>();
+        var volumeProfile = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.VolumeProfile>("Assets/DefaultVolumeProfile.asset");
+        if (volumeProfile != null)
+        {
+            volume.sharedProfile = volumeProfile;
+        }
+        volume.isGlobal = true;
+        volume.priority = 100;
+
+        // URP post effects are disabled on the serialized Quest cameras in the
+        // old scene. Enable them on the active cameras so the global vignette
+        // is actually rendered in both eyes.
+        foreach (Camera sceneCamera in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+        {
+            var cameraData = sceneCamera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            if (cameraData != null) cameraData.renderPostProcessing = true;
+        }
+
+        GameObject visGo = new GameObject("VisibilityController");
+        visGo.transform.SetParent(root.transform, false);
+        VisibilityController vis = visGo.AddComponent<VisibilityController>();
+        vis.volume = volume;
+
+        GameObject eventGo = new GameObject("HarassmentEvent");
+        eventGo.transform.SetParent(root.transform, false);
+        HarassmentEvent evt = eventGo.AddComponent<HarassmentEvent>();
+        evt.buttons = buttons;
+        evt.visibilityController = vis;
+        evt.bombBodyRenderer = bombBodyRenderer;
     }
 
     // ------------------------------------------------------------------ Primitivas (solo editor)

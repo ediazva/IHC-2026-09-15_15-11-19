@@ -2709,7 +2709,7 @@ Canvas:
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
   m_UseReflectionProbes: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 0
@@ -9710,11 +9710,15 @@ MonoBehaviour:
   laceHandle: {fileID: 669413751}
   wrappingRoot: {fileID: 1273712823}
   tableTop: {fileID: 1651731337}
+  skipPresentIntro: 1
   pullDistance: 0.18
   boxHeight: 0.68
   floatHeight: 0.45
   riseSpeed: 1.8
   spinDegreesPerSecond: 55
+  pinchFingerDistance: 0.035
+  pinchStartRadius: 0.35
+  ovrPinchThreshold: 0.8
 --- !u!1 &1886069355
 GameObject:
   m_ObjectHideFlags: 0
@@ -9814,7 +9818,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1904143682
 Transform:
   m_ObjectHideFlags: 0
@@ -10253,13 +10257,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fd4352905acb64fd2bb737b999b4b287, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SimonModule
-  startLength: 4
   roundsToSolve: 3
-  lengthIncreasePerRound: 1
-  stepDuration: 0.4
-  stepGap: 0.15
-  startDelay: 1
-  roundPause: 0.7
+  basePatternLength: 3
+  flashDuration: 0.45
+  flashGap: 0.16
+  playbackDelay: 0.55
+  nextRoundDelay: 0.75
   buttons:
   - gameObject: {fileID: 1876329692}
     color: {r: 0.9, g: 0.16, b: 0.13, a: 1}
@@ -10359,7 +10362,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2

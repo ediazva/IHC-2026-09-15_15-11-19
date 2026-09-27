@@ -677,6 +677,7 @@ public class BombUI : MonoBehaviour
 
     private void BuildControllerHUD()
     {
+        /*
         // Buscar RightHandAnchor en la escena
         Transform rightHand = FindRightHandAnchor();
         if (rightHand == null)
@@ -724,7 +725,7 @@ public class BombUI : MonoBehaviour
         if (TMP_Settings.defaultFontAsset != null) controllerTimeText.font = TMP_Settings.defaultFontAsset;
 
         // Escalado: 1 unidad canvas = 1 metro, queremos ~5cm alto texto
-        controllerHudGo.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);
+        controllerHudGo.transform.localScale = new Vector3(0.0015f, 0.0015f, 0.0015f);*/
     }
 
     private void BuildCubeHUD()

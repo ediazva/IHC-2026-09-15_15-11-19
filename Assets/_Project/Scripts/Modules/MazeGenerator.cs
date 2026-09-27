@@ -108,7 +108,7 @@ public static class MazeSpiralGenerator
         data.goal = FarthestCell(data, rng);
 
         // Celdas trampa: 1-2 celdas intermedias, nunca la meta ni vecinas del inicio.
-        PickHoles(ref data, seed);
+        // PickHoles(ref data, seed); // Delete this
 
         return data;
     }

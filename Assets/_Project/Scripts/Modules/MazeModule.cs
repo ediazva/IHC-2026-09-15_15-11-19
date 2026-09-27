@@ -43,14 +43,14 @@ public class MazeModule : ModuleBase
     [Tooltip("Tamaño de cada celda en metros.")]
     public float cellSize = 0.03f;
 
-    [Tooltip("Grosor de las paredes.")]
-    public float wallThickness = 0.008f;
+        [Tooltip("Grosor de las paredes.")]
+        public float wallThickness = 0.012f;
 
     [Tooltip("Altura de las paredes sobre la lámina.")]
     public float wallHeight = 0.05f;
 
-    [Tooltip("Radio de la bolita.")]
-    public float ballRadius = 0.011f;
+        [Tooltip("Radio de la bolita.")]
+        public float ballRadius = 0.008f;
 
     [Tooltip("Fija una semilla concreta para depurar/dificultad (useFixedSeed).")]
     public bool useFixedSeed;
@@ -228,24 +228,19 @@ public class MazeModule : ModuleBase
         if (ball == null || ballRb == null || ballRb.isKinematic) return;
 
         Vector3 localPos = transform.InverseTransformPoint(ball.position);
-        if (Mathf.Abs(localPos.x - ballPlaneLocalX) > 0.0001f)
+        float xError = localPos.x - ballPlaneLocalX;
+
+        if (Mathf.Abs(xError) > 0.002f)
         {
             localPos.x = ballPlaneLocalX;
-            ball.position = transform.TransformPoint(localPos);
+            ballRb.MovePosition(transform.TransformPoint(localPos));
         }
 
         Vector3 localVelocity = transform.InverseTransformDirection(ballRb.linearVelocity);
-        if (Mathf.Abs(localVelocity.x) > 0.0001f)
+        if (Mathf.Abs(localVelocity.x) > 0.01f)
         {
-            localVelocity.x = 0f;
+            localVelocity.x *= 0.5f;
             ballRb.linearVelocity = transform.TransformDirection(localVelocity);
-        }
-
-        Vector3 localAngularVelocity = transform.InverseTransformDirection(ballRb.angularVelocity);
-        if (Mathf.Abs(localAngularVelocity.x) > 0.0001f)
-        {
-            localAngularVelocity.x = 0f;
-            ballRb.angularVelocity = transform.TransformDirection(localAngularVelocity);
         }
     }
 
@@ -306,12 +301,22 @@ public class MazeModule : ModuleBase
         GameObject wallsGo = new GameObject("MazeWalls");
         wallsGo.transform.SetParent(transform, false);
 
+        PhysicsMaterial wallPhysMat = new PhysicsMaterial("MazeWall")
+        {
+            dynamicFriction = 0.4f,
+            staticFriction = 0.4f,
+            bounciness = 0f,
+            frictionCombine = PhysicsMaterialCombine.Average,
+            bounceCombine = PhysicsMaterialCombine.Average,
+        };
+
         Color floorColor = BombRoomPalette.Colors[2]; // blanco sucio
         Color wallColor = BombRoomPalette.Colors[5];  // negro/gris oscuro
 
         // 1. Placa de cierre contra la cara del cubo.
         Fx.Cube(floorGo.transform, "MazeBack", new Vector3(Layout.BackX, 0f, 0f),
             new Vector3(Layout.BackThickness, n * cellSize, n * cellSize), wallColor);
+        AssignPhysMat(floorGo.transform, wallPhysMat);
 
         // 2. Lámina de rodadura: una loseta por celda (se omiten meta y trampas).
         for (int r = 0; r < n; r++)
@@ -324,6 +329,8 @@ public class MazeModule : ModuleBase
                     new Vector3(Layout.SheetThickness, cellSize, cellSize), floorColor);
             }
         }
+
+        AssignPhysMat(floorGo.transform, wallPhysMat);
 
         // 3. Paredes INTERIORES (entre celdas). Se omiten las del perímetro
         // (r=0, r=n, c=0, c=n): el marco MazeRim* ya las dibuja, y duplicarlas
@@ -373,6 +380,8 @@ public class MazeModule : ModuleBase
             new Vector3(wallHeight, wallThickness, slotLeft - leftZ), wallColor);
         Fx.Cube(wallsGo.transform, "MazeRimTopR", new Vector3(wallX, topY, (slotRight + rightZ) * 0.5f),
             new Vector3(wallHeight, wallThickness, rightZ - slotRight), wallColor);
+
+        AssignPhysMat(wallsGo.transform, wallPhysMat);
 
         // 5. Embudo visual (sin collider) que guía la bolita hacia el hueco.
         float funnelLen = (slotRight - slotLeft) * 0.9f;
@@ -443,6 +452,16 @@ public class MazeModule : ModuleBase
         yield return null;
         yield return null;
         GetComponentInParent<BombManager>()?.ReapplyGrabScope();
+    }
+
+    private static void AssignPhysMat(Transform parent, PhysicsMaterial mat)
+    {
+        if (parent == null) return;
+        foreach (Collider col in parent.GetComponentsInChildren<Collider>(true))
+        {
+            if (col != null && !col.isTrigger)
+                col.material = mat;
+        }
     }
 
     private static bool IsGoalOrHole(MazeSpiralGenerator.MazeData data, int r, int c)

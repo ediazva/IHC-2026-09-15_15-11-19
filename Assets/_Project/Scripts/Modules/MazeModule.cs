@@ -54,7 +54,11 @@ public class MazeModule : ModuleBase
 
     [Header("Sensibilidad física")]
     [Tooltip("Multiplicador de aceleración de la gravedad sobre el tablero; 1 es física normal.")]
-    [Range(0.5f, 3f)] public float tiltSensitivity = 1.7f;
+    [Range(0.25f, 2f)] public float tiltSensitivity = 1f;
+    [Tooltip("Frenado de rodadura local; evita que la bolita siga acelerando indefinidamente.")]
+    [Min(0f)] public float rollingDamping = 2f;
+    [Tooltip("Velocidad máxima local de la bolita, en metros por segundo.")]
+    [Min(0.01f)] public float maximumBallSpeed = 0.16f;
 
     [Tooltip("Fija una semilla concreta para depurar/dificultad (useFixedSeed).")]
     public bool useFixedSeed;
@@ -84,6 +88,12 @@ public class MazeModule : ModuleBase
     private Renderer ballRenderer;
     private Transform ballBeacon;
     private PhysicsMaterial ballPhysicsMaterial;
+    private Material ballTrailMaterial;
+    private SphereCollider ballCollider;
+    private readonly List<Collider> movementWalls = new List<Collider>();
+    private readonly Collider[] goalOverlapBuffer = new Collider[8];
+    private Vector2 ballLocalVelocity;
+    private bool ballInPlay;
     private float ballPlaneLocalX;
     private float mazeMinY;
     private float mazeMaxY;
@@ -112,9 +122,9 @@ public class MazeModule : ModuleBase
 
     private void FixedUpdate()
     {
-        ApplyTiltAcceleration();
-        ConstrainBallToMazePlane();
+        SimulateBallOnMazePlane(Time.fixedDeltaTime);
         RecoverBallIfOutOfBounds();
+        CheckGoalOverlap();
     }
 
     public override void ResetModule()
@@ -188,9 +198,13 @@ public class MazeModule : ModuleBase
         if (ballRb == null) return;
         localPos.x = ballPlaneLocalX;
         ballRb.isKinematic = true;
+        ballRb.useGravity = false;
+        ball.transform.SetParent(transform, false);
         ball.transform.position = transform.TransformPoint(localPos);
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
+        ballLocalVelocity = Vector2.zero;
+        ballInPlay = false;
     }
 
     private IEnumerator ReleaseBallAfterSpawn()
@@ -200,11 +214,11 @@ public class MazeModule : ModuleBase
         if (ballRb == null || IsSolved) yield break;
         ballRb.linearVelocity = Vector3.zero;
         ballRb.angularVelocity = Vector3.zero;
-        // A dynamic Rigidbody must not remain a transform child of the moving,
-        // kinematic bomb. Its world pose stays put until it collides with the
-        // bomb-mounted maze geometry and is steered by projected gravity.
-        ball.SetParent(null, true);
-        ballRb.isKinematic = false;
+        // Keep it attached to the moving board; local-plane simulation below
+        // handles rolling without the dynamic-child/world-space drift.
+        ballRb.isKinematic = true;
+        ballRb.useGravity = false;
+        ballInPlay = true;
     }
 
     private void ResetBallToStart()
@@ -213,16 +227,19 @@ public class MazeModule : ModuleBase
         if (ballRb != null)
         {
             ballRb.isKinematic = true;
+            ballRb.useGravity = false;
+            ball.transform.SetParent(transform, true);
             ball.transform.position = startMarker.position;
             ballRb.linearVelocity = Vector3.zero;
             ballRb.angularVelocity = Vector3.zero;
-            ballRb.isKinematic = false;
+            ballLocalVelocity = Vector2.zero;
+            ballInPlay = true;
         }
     }
 
     private void RecoverBallIfOutOfBounds()
     {
-        if (ball == null || ballRb == null || ballRb.isKinematic || startMarker == null || IsSolved) return;
+        if (ball == null || ballRb == null || !ballInPlay || startMarker == null || IsSolved) return;
 
         Vector3 localPos = transform.InverseTransformPoint(ball.position);
         float margin = Mathf.Max(cellSize, ballRadius * 3f);
@@ -233,33 +250,107 @@ public class MazeModule : ModuleBase
         }
     }
 
-    private void ConstrainBallToMazePlane()
+    private void SimulateBallOnMazePlane(float deltaTime)
     {
-        if (ball == null || ballRb == null || ballRb.isKinematic) return;
+        if (!ballInPlay || ball == null || ballRb == null || ballCollider == null || IsSolved) return;
 
-        Vector3 localPos = transform.InverseTransformPoint(ball.position);
-        float xError = localPos.x - ballPlaneLocalX;
+        Vector3 gravityLocal = transform.InverseTransformDirection(Physics.gravity);
+        float sensitivity = Mathf.Max(0.1f, tiltSensitivity);
+        ballLocalVelocity.x += gravityLocal.y * sensitivity * deltaTime;
+        ballLocalVelocity.y += gravityLocal.z * sensitivity * deltaTime;
+        ballLocalVelocity *= Mathf.Exp(-Mathf.Max(0f, rollingDamping) * deltaTime);
+        ballLocalVelocity = Vector2.ClampMagnitude(ballLocalVelocity, Mathf.Max(0.01f, maximumBallSpeed));
 
-        if (Mathf.Abs(xError) > 0.004f)
-        {
-            localPos.x = ballPlaneLocalX;
-            ballRb.MovePosition(transform.TransformPoint(localPos));
-        }
-
-        Vector3 localVelocity = transform.InverseTransformDirection(ballRb.linearVelocity);
-        if (Mathf.Abs(localVelocity.x) > 0.005f)
-        {
-            localVelocity.x = 0f;
-            ballRb.linearVelocity = transform.TransformDirection(localVelocity);
-        }
+        Vector3 localPosition = ball.localPosition;
+        localPosition.x = ballPlaneLocalX;
+        localPosition = MoveBallAxis(localPosition, Vector3.up, ballLocalVelocity.x * deltaTime, 0);
+        localPosition = MoveBallAxis(localPosition, Vector3.forward, ballLocalVelocity.y * deltaTime, 1);
+        localPosition.x = ballPlaneLocalX;
+        // It is a kinematic child of the board: write local pose directly so
+        // cube motion carries the ball exactly, without Rigidbody world-space
+        // interpolation fighting its moving parent.
+        ball.transform.localPosition = localPosition;
     }
 
-    private void ApplyTiltAcceleration()
+    private Vector3 MoveBallAxis(Vector3 currentLocal, Vector3 localAxis, float distance, int velocityAxis)
     {
-        if (ball == null || ballRb == null || ballRb.isKinematic || IsSolved) return;
+        if (Mathf.Abs(distance) < 0.00001f) return currentLocal;
 
-        Vector3 gravityAlongBoard = Vector3.ProjectOnPlane(Physics.gravity, transform.right);
-        ballRb.AddForce(gravityAlongBoard * Mathf.Max(0.1f, tiltSensitivity), ForceMode.Acceleration);
+        // Sweep the sphere along the requested local axis in short increments.
+        // This remains stable while the whole board is being moved by a hand:
+        // all tests use board-local coordinates, avoiding stale world poses in
+        // the physics broadphase and preventing fast steps from tunnelling.
+        float maxStep = Mathf.Max(ballRadius * 0.35f, 0.001f);
+        int steps = Mathf.Clamp(Mathf.CeilToInt(Mathf.Abs(distance) / maxStep), 1, 128);
+        float stepDistance = distance / steps;
+        Vector3 accepted = currentLocal;
+        for (int step = 0; step < steps; step++)
+        {
+            Vector3 candidate = accepted + localAxis * stepDistance;
+            if (!OverlapsMovementWall(candidate))
+            {
+                accepted = candidate;
+                continue;
+            }
+
+            // Refine the last free point so the ball rests against the wall
+            // instead of visibly stopping a whole substep away from it.
+            float low = 0f;
+            float high = 1f;
+            for (int iteration = 0; iteration < 5; iteration++)
+            {
+                float middle = (low + high) * 0.5f;
+                Vector3 test = accepted + localAxis * (stepDistance * middle);
+                if (OverlapsMovementWall(test)) high = middle;
+                else low = middle;
+            }
+            accepted += localAxis * (stepDistance * low);
+            if (velocityAxis == 0) ballLocalVelocity.x = 0f;
+            else ballLocalVelocity.y = 0f;
+            break;
+        }
+        return accepted;
+    }
+
+    private bool OverlapsMovementWall(Vector3 ballCenter)
+    {
+        float radiusSquared = ballRadius * ballRadius;
+        for (int i = 0; i < movementWalls.Count; i++)
+        {
+            if (!(movementWalls[i] is BoxCollider wall) || wall == null || !wall.enabled) continue;
+
+            // Maze walls are axis-aligned in the module's local space. Convert
+            // their collider bounds back into that space so the solver follows
+            // the cube exactly regardless of its world position/rotation.
+            Vector3 center = transform.InverseTransformPoint(wall.transform.TransformPoint(wall.center));
+            Vector3 scale = wall.transform.lossyScale;
+            Vector3 halfSize = Vector3.Scale(wall.size * 0.5f, new Vector3(
+                Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+            Vector3 closest = new Vector3(
+                Mathf.Clamp(ballCenter.x, center.x - halfSize.x, center.x + halfSize.x),
+                Mathf.Clamp(ballCenter.y, center.y - halfSize.y, center.y + halfSize.y),
+                Mathf.Clamp(ballCenter.z, center.z - halfSize.z, center.z + halfSize.z));
+            if ((ballCenter - closest).sqrMagnitude < radiusSquared - 0.00000001f)
+                return true;
+        }
+        return false;
+    }
+
+    private void CheckGoalOverlap()
+    {
+        if (!ballInPlay || ball == null || IsSolved) return;
+        int count = Physics.OverlapSphereNonAlloc(ball.position, ballRadius, goalOverlapBuffer,
+            Physics.AllLayers, QueryTriggerInteraction.Collide);
+        for (int i = 0; i < count; i++)
+        {
+            Collider overlap = goalOverlapBuffer[i];
+            if (overlap == null || overlap == ballCollider || !overlap.isTrigger) continue;
+            if (IsTriggerOf(overlap, "Goal", "MazeGoal"))
+            {
+                NotifyBallTrigger(overlap);
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -310,6 +401,7 @@ public class MazeModule : ModuleBase
         floorGo.transform.SetParent(transform, false);
         GameObject wallsGo = new GameObject("MazeWalls");
         wallsGo.transform.SetParent(transform, false);
+        movementWalls.Clear();
 
         PhysicsMaterial wallPhysMat = new PhysicsMaterial("MazeWall")
         {
@@ -392,6 +484,12 @@ public class MazeModule : ModuleBase
             new Vector3(wallHeight, wallThickness, rightZ - slotRight), wallColor);
 
         AssignPhysMat(wallsGo.transform, wallPhysMat);
+        foreach (Collider wallCollider in wallsGo.GetComponentsInChildren<Collider>(true))
+        {
+            if (wallCollider == null || wallCollider.isTrigger) continue;
+            if (wallCollider.name.StartsWith("MazeWall") || wallCollider.name.StartsWith("MazeRim"))
+                movementWalls.Add(wallCollider);
+        }
 
         // 5. Embudo visual (sin collider) que guía la bolita hacia el hueco.
         float funnelLen = (slotRight - slotLeft) * 0.9f;
@@ -511,7 +609,20 @@ public class MazeModule : ModuleBase
         ballGo.transform.localScale = Vector3.one * (ballRadius * 2f);
         ballGo.GetComponent<Renderer>().sharedMaterial = Fx.Lit(BombRoomPalette.Colors[1], 0.3f);
 
+        TrailRenderer trail = ballGo.AddComponent<TrailRenderer>();
+        trail.time = 0.16f;
+        trail.minVertexDistance = ballRadius * 0.45f;
+        trail.startWidth = ballRadius * 0.9f;
+        trail.endWidth = ballRadius * 0.15f;
+        trail.numCornerVertices = 3;
+        trail.numCapVertices = 3;
+        ballTrailMaterial = Fx.Lit(new Color(0.25f, 0.75f, 1f), 1.2f);
+        trail.sharedMaterial = ballTrailMaterial;
+        trail.startColor = new Color(0.25f, 0.75f, 1f, 1f);
+        trail.endColor = new Color(0.25f, 0.75f, 1f, 1f);
+
         SphereCollider col = ballGo.GetComponent<SphereCollider>();
+        ballCollider = col;
         ballPhysicsMaterial = new PhysicsMaterial("Marble")
         {
             dynamicFriction = 0.15f,
@@ -527,9 +638,9 @@ public class MazeModule : ModuleBase
         rb.linearDamping = 0.1f;
         rb.angularDamping = 0.05f;
         rb.useGravity = false;
-        rb.isKinematic = false;
-        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-        rb.interpolation = RigidbodyInterpolation.Interpolate;
+        rb.isKinematic = true;
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        rb.interpolation = RigidbodyInterpolation.None;
         ballPlaneLocalX = BallRollPlaneLocalX;
 
         MazeBallListener listener = ballGo.AddComponent<MazeBallListener>();
@@ -585,6 +696,12 @@ public class MazeModule : ModuleBase
             if (Application.isPlaying) Destroy(ballPhysicsMaterial);
             else DestroyImmediate(ballPhysicsMaterial);
             ballPhysicsMaterial = null;
+        }
+        if (ballTrailMaterial != null)
+        {
+            if (Application.isPlaying) Destroy(ballTrailMaterial);
+            else DestroyImmediate(ballTrailMaterial);
+            ballTrailMaterial = null;
         }
         startMarker = null;
         ball = null;

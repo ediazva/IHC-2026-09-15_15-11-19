@@ -4,9 +4,9 @@ Prototipo de **Interacción Humano-Computador** en el que el jugador debe
 **desarmar una bomba** con las **manos** (VR), resolviendo varios minijuegos
 (puzzles) repartidos por las **caras de un cubo** que se puede agarrar y girar.
 
-Todo el contenido del juego (sala, bomba, módulos, materiales, sonidos y HUD) se
-**genera y autora desde Unity**, sin depender de assets 3D importados, para que
-el proyecto funcione recién clonado.
+La sala, la bomba, los módulos, los materiales y el audio se generan desde Unity.
+La presentación usa el prefab `Assets/Presents/prefabs/present1.prefab` y la
+derrota un efecto de `Assets/UnityTechnologies/ParticlePack`.
 
 ---
 
@@ -51,6 +51,12 @@ Características implementadas:
   resuelve **inclinando todo el cubo**; se regenera distinto en cada partida.
 - **Evento aleatorio sin texto**: el cubo muestra el color objetivo; el jugador
   debe recordarlo, buscar el botón del mismo color en una pared y tocarlo.
+- **Intro del regalo**: el regalo pulsa/emite luz; al tocarlo con el dedo se
+  reduce y revela la bomba, que inicia el temporizador. Usa el modelo
+  `Assets/Presents/prefabs/present1.prefab`; no requiere tirar de una cinta.
+- **Explosión de derrota**: efecto de una sola reproducción de Particle Pack al
+  agotarse el tiempo o llegar al máximo de strikes; la estructura de la bomba
+  se oculta al terminar el estallido.
 - **HUD** en mundo con tiempo, estado, errores y feedback.
 - **Audio 100 % procedural** (generado por código, sin ficheros de audio).
 - Soporte para **manos (hand tracking)** y para probar **sin visor** con el

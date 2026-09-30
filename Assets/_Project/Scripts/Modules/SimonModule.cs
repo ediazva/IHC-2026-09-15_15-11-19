@@ -47,9 +47,13 @@ public class SimonModule : ModuleBase
 
         [NonSerialized] public Renderer renderer;
         [NonSerialized] public Material material;
+        [NonSerialized] public Transform visual;
+        [NonSerialized] public Vector3 visualRestLocalPosition;
         [NonSerialized] public PokeInteractable poke;
         [NonSerialized] public Action<InteractableStateChangeArgs> handler;
         [NonSerialized] public float litUntil;
+        [NonSerialized] public Vector3 restLocalPosition;
+        [NonSerialized] public bool pressed;
     }
 
     [Header("Config")]
@@ -59,6 +63,7 @@ public class SimonModule : ModuleBase
     [SerializeField] private float flashGap = 0.16f;
     [SerializeField] private float playbackDelay = 0.55f;
     [SerializeField] private float nextRoundDelay = 0.75f;
+    [SerializeField, Range(0.002f, 0.02f)] private float pressDepth = 0.008f;
 
     [Header("Scene References")]
     [SerializeField] private List<SimonButton> buttons = new List<SimonButton>();
@@ -70,11 +75,15 @@ public class SimonModule : ModuleBase
     private PokeInteractable startPoke;
     private Action<InteractableStateChangeArgs> startHandler;
     private Renderer startRenderer;
+    private Transform startVisual;
     private Material startMaterial;
+    private Vector3 startVisualRestLocalPosition;
+    private bool startButtonPressed;
     private bool started;
     private bool acceptingInput;
     private int inputIndex;
     private int currentRound;
+    private float errorFlashUntil;
 
     public int SequenceLength => pattern.Count;
     public int Progress => inputIndex;
@@ -126,6 +135,7 @@ public class SimonModule : ModuleBase
         inputIndex = 0;
         currentRound = 0;
         ClearLights();
+        ResetButtonPositions();
     }
 
     private void PrepareButtons()
@@ -135,7 +145,10 @@ public class SimonModule : ModuleBase
             SimonButton button = buttons[i];
             if (button == null || button.gameObject == null) continue;
 
-            button.renderer = button.gameObject.GetComponent<Renderer>();
+            button.visual = CreatePressableVisual(button.gameObject, $"SimonButtonVisual_{i}");
+            button.visualRestLocalPosition = button.visual != null
+                ? button.visual.localPosition : Vector3.zero;
+            button.renderer = button.visual != null ? button.visual.GetComponent<Renderer>() : null;
             if (button.renderer != null)
             {
                 button.material = button.renderer.sharedMaterial != null
@@ -145,8 +158,13 @@ public class SimonModule : ModuleBase
             }
 
             int index = i;
-            button.poke = Isdk.Poke(button.gameObject, OutwardOf(button.gameObject));
-            button.handler = Isdk.Bind(button.poke, () => PressButton(index), null, button.handler);
+            button.restLocalPosition = button.gameObject.transform.localPosition;
+            // 65 mm visible face + 6 mm total tolerance = 71 mm surface,
+            // leaving a 1 mm gap before the 72 mm neighboring button spacing.
+            button.poke = Isdk.Poke(button.gameObject, OutwardOf(button.gameObject), 0.006f);
+            button.handler = Isdk.Bind(button.poke,
+                () => OnSimonButtonPressed(button, index),
+                () => OnSimonButtonReleased(button), button.handler);
             button.gameObject.SetActive(true);
         }
 
@@ -158,7 +176,9 @@ public class SimonModule : ModuleBase
 
         if (startButton != null)
         {
-            startRenderer = startButton.GetComponent<Renderer>();
+            startVisual = CreatePressableVisual(startButton, "SimonStartButtonVisual");
+            startVisualRestLocalPosition = startVisual != null ? startVisual.localPosition : Vector3.zero;
+            startRenderer = startVisual != null ? startVisual.GetComponent<Renderer>() : null;
             if (startRenderer != null)
             {
                 startMaterial = startRenderer.sharedMaterial != null
@@ -167,8 +187,9 @@ public class SimonModule : ModuleBase
                 startRenderer.sharedMaterial = startMaterial;
                 startMaterial.EnableKeyword("_EMISSION");
             }
-            startPoke = Isdk.Poke(startButton, OutwardOf(startButton));
-            startHandler = Isdk.Bind(startPoke, PressStart, null, startHandler);
+            startPoke = Isdk.Poke(startButton, OutwardOf(startButton), 0.006f);
+            startHandler = Isdk.Bind(startPoke, OnStartButtonPressed, OnStartButtonReleased, startHandler);
+            Debug.Log($"[Simon] Botón de inicio enlazado: {startButton.name}.", this);
         }
         else
         {
@@ -176,14 +197,87 @@ public class SimonModule : ModuleBase
         }
     }
 
+    private static Transform CreatePressableVisual(GameObject interactionRoot, string visualName)
+    {
+        if (interactionRoot == null) return null;
+
+        MeshFilter sourceFilter = interactionRoot.GetComponent<MeshFilter>();
+        MeshRenderer sourceRenderer = interactionRoot.GetComponent<MeshRenderer>();
+        if (sourceFilter == null || sourceRenderer == null) return null;
+
+        GameObject visual = new GameObject(visualName, typeof(MeshFilter), typeof(MeshRenderer));
+        visual.transform.SetParent(interactionRoot.transform, false);
+        visual.transform.localPosition = Vector3.zero;
+        visual.transform.localRotation = Quaternion.identity;
+        visual.transform.localScale = Vector3.one;
+
+        MeshFilter visualFilter = visual.GetComponent<MeshFilter>();
+        visualFilter.sharedMesh = sourceFilter.sharedMesh;
+        MeshRenderer visualRenderer = visual.GetComponent<MeshRenderer>();
+        visualRenderer.sharedMaterials = sourceRenderer.sharedMaterials;
+
+        // Keep the collider and Poke surface fixed while only the visible mesh
+        // travels inward. That prevents a press animation from cancelling or
+        // re-triggering its own Poke selection.
+        sourceRenderer.enabled = false;
+        return visual.transform;
+    }
+
+    private void OnSimonButtonPressed(SimonButton button, int index)
+    {
+        if (button == null || button.pressed) return;
+        button.pressed = true;
+        SetButtonPressed(button, true);
+        SFX.Tone(460f, 0.045f, 0.22f, 18f);
+        PressButton(index);
+    }
+
+    private void OnSimonButtonReleased(SimonButton button)
+    {
+        if (button == null) return;
+        button.pressed = false;
+        SetButtonPressed(button, false);
+    }
+
+    private void SetButtonPressed(SimonButton button, bool pressed)
+    {
+        if (button?.visual == null) return;
+        button.visual.localPosition = button.visualRestLocalPosition +
+            (pressed ? Vector3.right * pressDepth : Vector3.zero);
+    }
+
+    private void OnStartButtonPressed()
+    {
+        if (startButtonPressed) return;
+        startButtonPressed = true;
+        if (startVisual != null)
+            startVisual.localPosition = startVisualRestLocalPosition + Vector3.right * pressDepth;
+        PressStart();
+    }
+
+    private void OnStartButtonReleased()
+    {
+        startButtonPressed = false;
+        if (startVisual != null) startVisual.localPosition = startVisualRestLocalPosition;
+    }
+
+    private void ResetButtonPositions()
+    {
+        foreach (SimonButton button in buttons)
+        {
+            if (button != null) button.pressed = false;
+            SetButtonPressed(button, false);
+        }
+        OnStartButtonReleased();
+    }
+
     private Vector3 OutwardOf(GameObject go)
     {
-        Vector3 center = bomb != null ? bomb.transform.position : transform.position;
-        Vector3 worldOut = go.transform.position - center;
-        if (worldOut.sqrMagnitude < 0.0001f)
-            worldOut = transform.TransformDirection(Vector3.left);
-
-        return go.transform.InverseTransformDirection(worldOut.normalized).normalized;
+        // Every Simon button lies on the bomb's -X face. Computing a radial
+        // direction from the bomb center tilts the poke plane diagonally for
+        // the lower/outer buttons and can put START's touch surface off-face.
+        Vector3 worldOut = transform.TransformDirection(Vector3.left).normalized;
+        return go.transform.InverseTransformDirection(worldOut).normalized;
     }
 
     private void OnBombStateChanged(BombState state)
@@ -203,11 +297,13 @@ public class SimonModule : ModuleBase
         if (bomb != null && bomb.State != BombState.Running)
         {
             Debug.Log($"[Simon] START ignored, bomb state is {bomb.State}", this);
+            SFX.Play(SfxType.Denied, 0.55f);
             return;
         }
 
         started = true;
         currentRound = 0;
+        Debug.Log("[Simon] Secuencia iniciada; el temporizador no cambia.", this);
         SFX.Tone(880f, 0.12f, 0.5f);
         StartRound();
     }
@@ -259,9 +355,11 @@ public class SimonModule : ModuleBase
         Flash(index, 0.18f);
         SFX.Tone(NoteFrequencies[Mathf.Clamp(index, 0, NoteFrequencies.Length - 1)], 0.2f, 0.55f);
 
+        Debug.Log($"[Simon] Paso {inputIndex + 1}/{pattern.Count}: esperado={pattern[inputIndex]}, pulsado={index}.", this);
         if (index != pattern[inputIndex])
         {
             acceptingInput = false;
+            errorFlashUntil = Time.time + 0.65f;
             OnSimonWrong?.Invoke();
             SFX.Play(SfxType.Denied, 0.7f);
             AddStrike();
@@ -327,13 +425,18 @@ public class SimonModule : ModuleBase
             if (button?.material == null) continue;
 
             bool lit = button.litUntil > Time.time;
-            Color baseColor = button.color * (lit ? 1.7f : 0.5f);
+            bool errorFlash = errorFlashUntil > Time.time;
+            Color baseColor = errorFlash
+                ? new Color(1f, 0.12f, 0.06f)
+                : button.color * (lit ? 1.7f : 0.5f);
             button.material.SetColor("_BaseColor", baseColor);
             if (button.material.HasProperty("_Color"))
                 button.material.SetColor("_Color", baseColor);
 
             button.material.EnableKeyword("_EMISSION");
-            button.material.SetColor("_EmissionColor", button.color * (lit ? 4f : 0f));
+            button.material.SetColor("_EmissionColor", errorFlash
+                ? new Color(1f, 0.08f, 0.02f) * 3f
+                : button.color * (lit ? 4f : 0f));
         }
 
         if (startMaterial != null)

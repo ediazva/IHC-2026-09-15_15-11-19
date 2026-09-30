@@ -18,6 +18,7 @@ public class PresentBoxReveal : MonoBehaviour
     [Header("References")]
     public Transform bomb;
     public Transform laceHandle;
+    public GameObject giftBody;
     public GameObject wrappingRoot;
     public Transform tableTop;
 
@@ -36,6 +37,11 @@ public class PresentBoxReveal : MonoBehaviour
     public float pinchStartRadius = 0.35f;
     public float ovrPinchThreshold = 0.8f;
 
+    [Header("Touch reveal")]
+    [Min(0.1f)] public float revealTransitionDuration = 0.55f;
+    public Color giftGlowColor = new Color(1f, 0.72f, 0.18f);
+    [Min(0f)] public float giftGlowIntensity = 1.5f;
+
     private Vector3 laceStartPosition;
     private Vector3 bombRestPosition;
     private Quaternion bombRestRotation;
@@ -53,6 +59,13 @@ public class PresentBoxReveal : MonoBehaviour
     private Action<InteractableStateChangeArgs> laceHandGrabHandler;
     private Action<InteractableStateChangeArgs> bombGrabHandler;
     private Action<InteractableStateChangeArgs> bombHandGrabHandler;
+    private readonly List<PokeInteractable> giftPokes = new List<PokeInteractable>();
+    private readonly List<Action<InteractableStateChangeArgs>> giftPokeHandlers = new List<Action<InteractableStateChangeArgs>>();
+    private readonly List<GameObject> giftPokeHelpers = new List<GameObject>();
+    private Renderer giftRenderer;
+    private Material giftMaterial;
+    private Vector3 giftBaseScale;
+    private Coroutine revealTransition;
 
     private XRHandSubsystem handSubsystem;
     private static readonly List<XRHandSubsystem> handSubsystems = new List<XRHandSubsystem>();
@@ -71,6 +84,7 @@ public class PresentBoxReveal : MonoBehaviour
 
     private void TrySubscribeHandSubsystem()
     {
+        if (laceHandle == null) return;
         if (handSubsystem != null) return;
 
         SubsystemManager.GetSubsystems(handSubsystems);
@@ -118,8 +132,70 @@ public class PresentBoxReveal : MonoBehaviour
         laceGrabHandler = BindLaceReveal(laceGrab, laceGrabHandler);
         laceHandGrabHandler = BindLaceReveal(laceHandGrab, laceHandGrabHandler);
 
+        if (giftBody != null)
+        {
+            giftRenderer = giftBody.GetComponentInChildren<Renderer>();
+            if (giftRenderer != null && giftRenderer.sharedMaterial != null)
+            {
+                giftMaterial = new Material(giftRenderer.sharedMaterial);
+                giftRenderer.sharedMaterial = giftMaterial;
+                giftMaterial.EnableKeyword("_EMISSION");
+            }
+            giftBaseScale = giftBody.transform.localScale;
+            SetupGiftPokeSurfaces();
+        }
+
         if (skipPresentIntro)
             Reveal();
+    }
+
+    private void SetupGiftPokeSurfaces()
+    {
+        Collider bodyCollider = giftBody != null ? giftBody.GetComponent<Collider>() : null;
+        if (bodyCollider == null)
+        {
+            Debug.LogError("[PresentBoxReveal] Gift body has no collider; cannot poke it.", this);
+            return;
+        }
+
+        Vector3 size = bodyCollider is BoxCollider box ? box.size :
+            new Vector3(bodyCollider.bounds.size.x / Mathf.Max(0.001f, giftBody.transform.lossyScale.x),
+                bodyCollider.bounds.size.y / Mathf.Max(0.001f, giftBody.transform.lossyScale.y),
+                bodyCollider.bounds.size.z / Mathf.Max(0.001f, giftBody.transform.lossyScale.z));
+        float thickness = Mathf.Min(size.x, size.y, size.z) * 0.12f;
+
+        // One poke plane per face, all bound to the same reveal action. The
+        // gift prefab is one mesh, so we add invisible trigger/collider helpers
+        // instead of guessing which imported face the player can reach.
+        AddGiftPokeFace("GiftPoke_Front", new Vector3(0f, 0f, size.z * 0.5f),
+            new Vector3(size.x, size.y, thickness), Quaternion.identity);
+        AddGiftPokeFace("GiftPoke_Back", new Vector3(0f, 0f, -size.z * 0.5f),
+            new Vector3(size.x, size.y, thickness), Quaternion.LookRotation(Vector3.back, Vector3.up));
+        AddGiftPokeFace("GiftPoke_Left", new Vector3(-size.x * 0.5f, 0f, 0f),
+            new Vector3(size.z, size.y, thickness), Quaternion.LookRotation(Vector3.left, Vector3.up));
+        AddGiftPokeFace("GiftPoke_Right", new Vector3(size.x * 0.5f, 0f, 0f),
+            new Vector3(size.z, size.y, thickness), Quaternion.LookRotation(Vector3.right, Vector3.up));
+        AddGiftPokeFace("GiftPoke_Top", new Vector3(0f, size.y * 0.5f, 0f),
+            new Vector3(size.x, size.z, thickness), Quaternion.LookRotation(Vector3.up, Vector3.forward));
+        AddGiftPokeFace("GiftPoke_Bottom", new Vector3(0f, -size.y * 0.5f, 0f),
+            new Vector3(size.x, size.z, thickness), Quaternion.LookRotation(Vector3.down, Vector3.back));
+    }
+
+    private void AddGiftPokeFace(string surfaceName, Vector3 localPosition, Vector3 localScale, Quaternion localRotation)
+    {
+        GameObject face = new GameObject(surfaceName, typeof(BoxCollider));
+        face.layer = giftBody.layer;
+        face.transform.SetParent(giftBody.transform, false);
+        face.transform.localPosition = localPosition;
+        face.transform.localRotation = localRotation;
+        face.transform.localScale = localScale;
+        face.GetComponent<BoxCollider>().isTrigger = true;
+
+        PokeInteractable poke = Isdk.Poke(face, Vector3.forward);
+        Action<InteractableStateChangeArgs> handler = Isdk.Bind(poke, Reveal, null);
+        giftPokeHelpers.Add(face);
+        giftPokes.Add(poke);
+        giftPokeHandlers.Add(handler);
     }
 
     private void SnapWrappingToTable()
@@ -163,17 +239,21 @@ public class PresentBoxReveal : MonoBehaviour
             Reveal();
 #endif
 
-        if (!revealed)
+        if (!revealed && laceHandle != null)
         {
             UpdateOvrPinchPull(OVRInput.Axis1D.PrimaryIndexTrigger, OVRInput.Controller.LHand, ref leftPinching, ref leftPinchStartedOnLace, ref leftPinchStart);
             UpdateOvrPinchPull(OVRInput.Axis1D.SecondaryIndexTrigger, OVRInput.Controller.RHand, ref rightPinching, ref rightPinchStartedOnLace, ref rightPinchStart);
-        }
-
-        if (!revealed && laceHandle != null)
             CheckPulledFarEnough();
+        }
 
         if (floating && bomb != null)
             bomb.Rotate(Vector3.up, spinDegreesPerSecond * Time.deltaTime, Space.World);
+
+        if (!revealed && giftMaterial != null)
+        {
+            float pulse = 0.35f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.time * 3.5f));
+            giftMaterial.SetColor("_EmissionColor", giftGlowColor * (giftGlowIntensity * pulse));
+        }
     }
 
     private void CheckPulledFarEnough()
@@ -186,7 +266,7 @@ public class PresentBoxReveal : MonoBehaviour
 
     private void OnUpdatedHands(XRHandSubsystem subsystem, XRHandSubsystem.UpdateSuccessFlags updateSuccessFlags, XRHandSubsystem.UpdateType updateType)
     {
-        if (revealed || updateType != XRHandSubsystem.UpdateType.Dynamic) return;
+        if (revealed || laceHandle == null || updateType != XRHandSubsystem.UpdateType.Dynamic) return;
 
         if (HasUpdateSuccessFlag(updateSuccessFlags, XRHandSubsystem.UpdateSuccessFlags.LeftHandJoints)
             && UpdatePinchPull(subsystem.leftHand, ref leftPinching, ref leftPinchStartedOnLace, ref leftPinchStart)) return;
@@ -316,8 +396,28 @@ public class PresentBoxReveal : MonoBehaviour
         if (revealed) return;
 
         revealed = true;
+        if (revealTransition != null) StopCoroutine(revealTransition);
+        revealTransition = StartCoroutine(PlayGiftRevealTransition());
+    }
+
+    private IEnumerator PlayGiftRevealTransition()
+    {
+        SFX.Tone(660f, 0.28f, 0.65f);
+        float duration = Mathf.Max(0.1f, revealTransitionDuration);
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.unscaledDeltaTime;
+            float progress = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / duration));
+            if (giftBody != null)
+                giftBody.transform.localScale = Vector3.Lerp(giftBaseScale, giftBaseScale * 0.025f, progress);
+            if (giftMaterial != null)
+                giftMaterial.SetColor("_EmissionColor", giftGlowColor * Mathf.Lerp(giftGlowIntensity, 4f, progress));
+            yield return null;
+        }
 
         if (wrappingRoot != null) wrappingRoot.SetActive(false);
+        revealTransition = null;
         StartCoroutine(SpawnBombAndStartTimer());
     }
 
@@ -397,5 +497,11 @@ public class PresentBoxReveal : MonoBehaviour
         if (laceHandGrab != null && laceHandGrabHandler != null) laceHandGrab.WhenStateChanged -= laceHandGrabHandler;
         if (bombGrab != null && bombGrabHandler != null) bombGrab.WhenStateChanged -= bombGrabHandler;
         if (bombHandGrab != null && bombHandGrabHandler != null) bombHandGrab.WhenStateChanged -= bombHandGrabHandler;
+        for (int i = 0; i < giftPokes.Count; i++)
+            if (giftPokes[i] != null && giftPokeHandlers[i] != null)
+                giftPokes[i].WhenStateChanged -= giftPokeHandlers[i];
+        for (int i = 0; i < giftPokeHelpers.Count; i++)
+            if (giftPokeHelpers[i] != null) Destroy(giftPokeHelpers[i]);
+        if (giftMaterial != null) Destroy(giftMaterial);
     }
 }

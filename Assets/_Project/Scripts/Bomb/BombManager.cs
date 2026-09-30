@@ -26,7 +26,7 @@ public class BombManager : MonoBehaviour
     public List<ModuleBase> modules = new List<ModuleBase>();
 
     [Header("Dificultad")]
-    [Tooltip("Segundos que se restan por cada strike.")]
+    [Tooltip("Segundos que se restan por un error en un módulo.")]
     public float penaltyPerStrike = 35f;
     [Tooltip("Arranca la partida automáticamente al entrar en la escena.")]
     public bool autoStart = true;
@@ -35,6 +35,8 @@ public class BombManager : MonoBehaviour
     public TimerSystem Timer => timer;
     public StrikeSystem Strikes => strikes;
     public IReadOnlyList<ModuleBase> Modules => modules;
+
+    private BombUI bombUI;
 
     public event Action<BombState> OnStateChanged;
     public event Action OnDefused;
@@ -45,6 +47,7 @@ public class BombManager : MonoBehaviour
     {
         if (timer == null) timer = GetComponent<TimerSystem>();
         if (strikes == null) strikes = GetComponent<StrikeSystem>();
+        bombUI = GetComponentInChildren<BombUI>(true);
     }
 
     private void Start()
@@ -140,10 +143,17 @@ public class BombManager : MonoBehaviour
     {
         if (m == null || m.IsSolved) return;
 
-        strikes?.AddStrike();
+        bool countsAsStrike = m is SimonModule;
+        if (countsAsStrike) strikes?.AddStrike();
         timer?.ApplyPenalty(penaltyPerStrike);
 
-        Debug.Log($"[Bomba VR] STRIKE {strikes?.Strikes}/{strikes?.MaxStrikes} por módulo '{m.Title}'", m);
+        if (countsAsStrike)
+            Debug.Log($"[Bomba VR] STRIKE {strikes?.Strikes}/{strikes?.MaxStrikes} por módulo '{m.Title}'", m);
+        else
+        {
+            bombUI?.PulseErrorVisual();
+            Debug.Log($"[Bomba VR] Error en '{m.Title}': -{penaltyPerStrike:F0}s (sin strike).", m);
+        }
 
         // Si el tercer strike estalló la bomba, OnExploded ya cambió el estado.
     }

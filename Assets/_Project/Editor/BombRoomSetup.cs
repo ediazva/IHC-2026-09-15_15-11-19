@@ -20,6 +20,7 @@ using VRInteractionPrototype;
 /// </summary>
 public static class BombRoomSetup
 {
+    private const float PlayerEntryZ = -2.35f;
     private const string ScenePath = "Assets/_Project/Scenes/BombRoom.unity";
     private const string MaterialFolder = "Assets/_Project/Materials/BombRoom";
 
@@ -73,6 +74,7 @@ public static class BombRoomSetup
 
         EnsureLighting();
         BuildRoomWalls(root);
+        ConfigurePlayerEntryPosition();
 
         Transform tableTop = BuildTable(root).transform.Find("Top");
         TablePlacement table = GetTablePlacement(root, tableTop);
@@ -124,6 +126,7 @@ public static class BombRoomSetup
 
         EnsureLighting();
         BuildRoomWalls(root);
+        ConfigurePlayerEntryPosition();
 
         Transform tableTop = BuildTable(root).transform.Find("Top");
         TablePlacement table = GetTablePlacement(root, tableTop);
@@ -426,6 +429,9 @@ public static class BombRoomSetup
         mazeGo.transform.localPosition = new Vector3(MazeModule.Layout.FaceOffsetX, 0f, 0f);
         MazeModule maze = mazeGo.AddComponent<MazeModule>();
         maze.ballSource = simon;
+        maze.tiltSensitivity = 1f;
+        maze.rollingDamping = 2f;
+        maze.maximumBallSpeed = 0.16f;
 
         // Battery puzzle uses the otherwise-free rear (-Z) face. Its loose
         // pickups are parented to RoomWalls, never to the moving bomb.
@@ -449,10 +455,18 @@ public static class BombRoomSetup
         hud.bombBodyRenderer = bodyCube.GetComponent<Renderer>();
         hud.bombBodyColor = new Color(0.09f, 0.09f, 0.11f);
 
-        // Referencia al prefab de explosión fuego (Mirza Beig)
-        var explosionPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Mirza Beig/Cinematic Explosions FREE/Prefabs/Explosions/Explosion FREE 1 Variant.prefab");
-        if (explosionPrefab != null) hud.explosionFirePrefab = explosionPrefab;
-        else Debug.LogWarning("[BombRoomSetup] Explosion fire prefab no encontrado en Assets/Mirza Beig/Cinematic Explosions FREE/Prefabs/Explosions/Explosion FREE 1 Variant.prefab");
+        // Quest 2-friendly one-shot explosion from the imported Particle Pack.
+        var explosionPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/UnityTechnologies/ParticlePack/EffectExamples/Fire & Explosion Effects/Prefabs/SmallExplosion.prefab");
+        if (explosionPrefab != null)
+        {
+            hud.explosionFirePrefab = explosionPrefab;
+            hud.explosionScale = 0.55f;
+        }
+        else
+        {
+            Debug.LogWarning("[BombRoomSetup] Particle Pack SmallExplosion prefab not found; the bomb loss still uses the procedural flash.");
+        }
 
         // --- Botón de activación en la Cara Superior (se enciende al terminar).
         BuildArmButton(bomb.transform, manager, buttonMat);
@@ -462,9 +476,6 @@ public static class BombRoomSetup
 
     private static void BuildPresentIntro(Transform roomRoot, Transform bomb, TablePlacement table)
     {
-        Material paper = GetMaterial("Mat_GiftPaper", new Color(0.72f, 0.04f, 0.07f), metallic: 0f, smoothness: 0.25f);
-        Material ribbon = GetMaterial("Mat_GiftRibbon", new Color(1f, 0.76f, 0.12f), metallic: 0f, smoothness: 0.5f, emission: 0.15f);
-
         GameObject intro = new GameObject("PresentBoxIntro");
         intro.transform.SetParent(roomRoot, false);
 
@@ -472,66 +483,91 @@ public static class BombRoomSetup
         wrapping.transform.SetParent(intro.transform, false);
         wrapping.transform.localPosition = Vector3.zero;
 
-        const float width = 0.86f;
-        const float height = 0.68f;
-        const float depth = 0.72f;
-        const float wall = 0.025f;
-        intro.transform.position = new Vector3(table.Center.x, table.TopY + height * 0.5f, table.Center.z);
+        const float giftWidth = 0.50f;
+        const float giftHeight = 0.62f;
+        const float giftDepth = 0.50f;
+        const float modelScale = 120f;
+        intro.transform.position = new Vector3(table.Center.x, table.TopY + giftHeight * 0.5f, table.Center.z);
+        GameObject presentAsset = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Presents/prefabs/present1.prefab");
+        GameObject giftBody;
+        if (presentAsset != null)
+        {
+            giftBody = (GameObject)PrefabUtility.InstantiatePrefab(presentAsset);
+            giftBody.name = "GiftPresentModel";
+            giftBody.transform.SetParent(wrapping.transform, false);
+            giftBody.transform.localPosition = Vector3.zero;
+            giftBody.transform.localRotation = Quaternion.identity;
+            giftBody.transform.localScale = Vector3.one * modelScale;
 
-        GiftPanel(wrapping.transform, "Gift_Front", new Vector3(0f, 0f, depth * 0.5f), new Vector3(width, height, wall), paper);
-        GiftPanel(wrapping.transform, "Gift_Back", new Vector3(0f, 0f, -depth * 0.5f), new Vector3(width, height, wall), paper);
-        GiftPanel(wrapping.transform, "Gift_Left", new Vector3(-width * 0.5f, 0f, 0f), new Vector3(wall, height, depth), paper);
-        GiftPanel(wrapping.transform, "Gift_Right", new Vector3(width * 0.5f, 0f, 0f), new Vector3(wall, height, depth), paper);
-        GiftPanel(wrapping.transform, "Gift_Top", new Vector3(0f, height * 0.5f, 0f), new Vector3(width, wall, depth), paper);
-        GiftPanel(wrapping.transform, "Gift_Bottom", new Vector3(0f, -height * 0.5f, 0f), new Vector3(width, wall, depth), paper);
+            // This package prefab is one mesh with a tiny baked collider and a
+            // dynamic Rigidbody. Resize its collider to the intended world box
+            // and keep it immobile until it is hidden by the reveal transition.
+            BoxCollider giftCollider = giftBody.GetComponent<BoxCollider>();
+            if (giftCollider == null) giftCollider = giftBody.AddComponent<BoxCollider>();
+            giftCollider.size = new Vector3(giftWidth / modelScale, giftHeight / modelScale, giftDepth / modelScale);
+            giftCollider.center = Vector3.zero;
+            Rigidbody giftBodyRb = giftBody.GetComponent<Rigidbody>();
+            if (giftBodyRb == null) giftBodyRb = giftBody.AddComponent<Rigidbody>();
+            giftBodyRb.isKinematic = true;
+            giftBodyRb.useGravity = false;
 
-        Cube(wrapping.transform, "Ribbon_Vertical", new Vector3(0f, 0f, depth * 0.5f + 0.004f), new Vector3(0.07f, height + 0.02f, 0.014f), ribbon);
-        Cube(wrapping.transform, "Ribbon_Horizontal", new Vector3(0f, 0f, depth * 0.5f + 0.006f), new Vector3(width + 0.02f, 0.07f, 0.014f), ribbon);
-        Cube(wrapping.transform, "Ribbon_Top_X", new Vector3(0f, height * 0.5f + 0.006f, 0f), new Vector3(width + 0.02f, 0.014f, 0.07f), ribbon);
-        Cube(wrapping.transform, "Ribbon_Top_Z", new Vector3(0f, height * 0.5f + 0.008f, 0f), new Vector3(0.07f, 0.014f, depth + 0.02f), ribbon);
-
-        GameObject bowLeft = Sphere(wrapping.transform, "Bow_Left", new Vector3(-0.07f, height * 0.5f + 0.05f, 0f), 0.06f, ribbon);
-        bowLeft.transform.localScale = new Vector3(0.12f, 0.06f, 0.08f);
-        DestroyCollider(bowLeft);
-        GameObject bowRight = Sphere(wrapping.transform, "Bow_Right", new Vector3(0.07f, height * 0.5f + 0.05f, 0f), 0.06f, ribbon);
-        bowRight.transform.localScale = new Vector3(0.12f, 0.06f, 0.08f);
-        DestroyCollider(bowRight);
-
-        GameObject lace = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        lace.name = "PullLace";
-        lace.transform.SetParent(wrapping.transform, false);
-        lace.transform.localPosition = new Vector3(0f, -0.13f, depth * 0.5f + 0.05f);
-        lace.transform.localRotation = Quaternion.identity;
-        lace.transform.localScale = new Vector3(0.01f, 0.18f, 0.01f);
-        lace.GetComponent<Renderer>().sharedMaterial = ribbon;
-        DestroyCollider(lace);
-
-        GameObject handle = Sphere(wrapping.transform, "PullLaceHandle", new Vector3(0f, -0.34f, depth * 0.5f + 0.06f), 0.055f, ribbon);
-        Rigidbody handleRb = handle.AddComponent<Rigidbody>();
-        handleRb.isKinematic = true;
-        handleRb.useGravity = false;
-        Isdk.Grab(handle, handleRb);
-        Isdk.HandGrab(handle, handleRb);
+            Renderer giftRenderer = giftBody.GetComponentInChildren<Renderer>();
+            if (giftRenderer != null && giftRenderer.sharedMaterial != null)
+                giftRenderer.sharedMaterial = MakeUrpPresentMaterial(giftRenderer.sharedMaterial);
+        }
+        else
+        {
+            Debug.LogError("[BombRoomSetup] No se encontró Assets/Presents/prefabs/present1.prefab; se crea un regalo de respaldo.");
+            Material fallback = GetMaterial("Mat_PresentFallback", new Color(0.72f, 0.04f, 0.07f), smoothness: 0.35f);
+            giftBody = Cube(wrapping.transform, "GiftPresentFallback", Vector3.zero,
+                new Vector3(giftWidth, giftHeight, giftDepth), fallback);
+            giftBody.AddComponent<BoxCollider>();
+        }
 
         PresentBoxReveal reveal = intro.AddComponent<PresentBoxReveal>();
         reveal.bomb = bomb;
-        reveal.laceHandle = handle.transform;
+        reveal.giftBody = giftBody;
+        reveal.laceHandle = null;
         reveal.wrappingRoot = wrapping;
         reveal.tableTop = table.TopTransform;
-        reveal.boxHeight = height;
+        reveal.boxHeight = giftHeight;
+        reveal.skipPresentIntro = false;
 
         bomb.gameObject.SetActive(false);
     }
 
-    private static GameObject GiftPanel(Transform parent, string name, Vector3 localPos, Vector3 scale, Material mat)
+    private static Material MakeUrpPresentMaterial(Material source)
     {
-        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        go.name = name;
-        go.transform.SetParent(parent, false);
-        go.transform.localPosition = localPos;
-        go.transform.localScale = scale;
-        go.GetComponent<Renderer>().sharedMaterial = mat;
-        return go;
+        Color color = source != null && source.HasProperty("_Color") ? source.GetColor("_Color") : Color.white;
+        float metallic = source != null && source.HasProperty("_Metallic") ? source.GetFloat("_Metallic") : 0f;
+        float smoothness = source != null && source.HasProperty("_Glossiness") ? source.GetFloat("_Glossiness") : 0.35f;
+        Material result = GetMaterial("Mat_Present_Urp", color, metallic: metallic, smoothness: smoothness);
+
+        if (source != null)
+        {
+            if (source.HasProperty("_MainTex") && result.HasProperty("_BaseMap"))
+            {
+                result.SetTexture("_BaseMap", source.GetTexture("_MainTex"));
+                result.SetTextureScale("_BaseMap", source.GetTextureScale("_MainTex"));
+                result.SetTextureOffset("_BaseMap", source.GetTextureOffset("_MainTex"));
+            }
+            if (source.HasProperty("_BumpMap") && result.HasProperty("_BumpMap"))
+            {
+                result.SetTexture("_BumpMap", source.GetTexture("_BumpMap"));
+                result.EnableKeyword("_NORMALMAP");
+            }
+            if (source.HasProperty("_MetallicGlossMap") && result.HasProperty("_MetallicGlossMap"))
+            {
+                result.SetTexture("_MetallicGlossMap", source.GetTexture("_MetallicGlossMap"));
+                result.EnableKeyword("_METALLICGLOSSMAP");
+            }
+            if (source.HasProperty("_OcclusionMap") && result.HasProperty("_OcclusionMap"))
+                result.SetTexture("_OcclusionMap", source.GetTexture("_OcclusionMap"));
+        }
+
+        EditorUtility.SetDirty(result);
+        AssetDatabase.SaveAssets();
+        return result;
     }
 
     private readonly struct TablePlacement
@@ -714,8 +750,8 @@ public static class BombRoomSetup
         GameObject startBtn = GameObject.CreatePrimitive(PrimitiveType.Cube);
         startBtn.name = "SimonStartButton";
         startBtn.transform.SetParent(module.transform, false);
-        startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.14f, 0f);
-        startBtn.transform.localScale = new Vector3(0.075f, 0.075f, 0.18f);
+        startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.085f, 0f);
+        startBtn.transform.localScale = new Vector3(SimonModule.Layout.ButtonSize, SimonModule.Layout.ButtonSize, 0.11f);
         startBtn.GetComponent<Renderer>().sharedMaterial =
             GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.4f);
 
@@ -724,7 +760,7 @@ public static class BombRoomSetup
         // Etiqueta "START" (canvas world-space pequeño orientado hacia -X).
         GameObject labelGo = new GameObject("SimonStartLabel");
         labelGo.transform.SetParent(module.transform, false);
-        labelGo.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.14f, 0f);
+        labelGo.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.085f, 0f);
         labelGo.transform.localRotation = Quaternion.Euler(0f, -90f, 0f);
         labelGo.transform.localScale = new Vector3(0.0007f, 0.0007f, 0.0007f);
         Canvas canvas = labelGo.AddComponent<Canvas>();
@@ -870,12 +906,35 @@ public static class BombRoomSetup
         walls.roomDepth = 2.2f;
         walls.roomHeight = 2.4f;
         walls.wallThickness = 0.10f;
+        walls.floorWidth = 8f;
+        walls.floorDepth = 8f;
         walls.doorwayWidth = 0.80f;
         walls.doorwayHeight = 2.05f;
         walls.createCeiling = false;
         walls.wallMaterial = GetMaterial("Mat_RoomWalls", new Color(0.24f, 0.27f, 0.31f));
         walls.floorMaterial = GetMaterial("Mat_RoomFloor", new Color(0.12f, 0.14f, 0.17f));
         walls.RebuildGeometry();
+    }
+
+    private static void ConfigurePlayerEntryPosition()
+    {
+        GameObject cameraRig = GameObject.Find("[BuildingBlock] Camera Rig");
+        if (cameraRig == null) return;
+
+        Vector3 position = cameraRig.transform.position;
+        position.x = 0f;
+        position.z = PlayerEntryZ;
+        cameraRig.transform.position = position;
+
+        EditorHeadHeightOffset editorOffset = cameraRig.GetComponent<EditorHeadHeightOffset>();
+        if (editorOffset != null)
+        {
+            SerializedObject serializedOffset = new SerializedObject(editorOffset);
+            SerializedProperty startPosition = serializedOffset.FindProperty("editorStartPosition");
+            if (startPosition != null)
+                startPosition.vector3Value = new Vector3(0f, 0f, PlayerEntryZ);
+            serializedOffset.ApplyModifiedProperties();
+        }
     }
 
     private static void BuildHarassmentEvent(GameObject root)
@@ -942,7 +1001,7 @@ public static class BombRoomSetup
         // URP post effects are disabled on the serialized Quest cameras in the
         // old scene. Enable them on the active cameras so the global vignette
         // is actually rendered in both eyes.
-        foreach (Camera sceneCamera in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+        foreach (Camera sceneCamera in Object.FindObjectsByType<Camera>())
         {
             var cameraData = sceneCamera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
             if (cameraData != null) cameraData.renderPostProcessing = true;
@@ -952,13 +1011,30 @@ public static class BombRoomSetup
         visGo.transform.SetParent(root.transform, false);
         VisibilityController vis = visGo.AddComponent<VisibilityController>();
         vis.volume = volume;
+        vis.blackoutShader = AssetDatabase.LoadAssetAtPath<Shader>(
+            "Assets/_Project/Materials/BombRoom/XRBlackout.shader");
+        vis.obscuredVignette = 0.92f;
+        vis.obscuredPostExposure = 0f;
+        vis.fullViewOverlayOpacity = 1f;
+        vis.centerApertureRadius = 0.18f;
+        vis.apertureEdgeSoftness = 0.012f;
+        vis.fadeInSeconds = 0.08f;
+        vis.fadeOutSeconds = 0.25f;
 
         GameObject eventGo = new GameObject("HarassmentEvent");
         eventGo.transform.SetParent(root.transform, false);
         HarassmentEvent evt = eventGo.AddComponent<HarassmentEvent>();
+        evt.bomb = root.GetComponentInChildren<BombManager>(true);
         evt.buttons = buttons;
         evt.visibilityController = vis;
         evt.bombBodyRenderer = bombBodyRenderer;
+        evt.initialEventMinDelay = 2f;
+        evt.initialEventMaxDelay = 3f;
+        evt.minInterval = 8f;
+        evt.maxInterval = 14f;
+        evt.targetCueSeconds = 1.1f;
+        evt.obscuredVignette = vis.obscuredVignette;
+        evt.obscuredExposure = vis.obscuredPostExposure;
     }
 
     // ------------------------------------------------------------------ Primitivas (solo editor)

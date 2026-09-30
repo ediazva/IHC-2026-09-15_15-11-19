@@ -21,8 +21,9 @@ public class BombUI : MonoBehaviour
     public Renderer bombBodyRenderer;
     public Color bombBodyColor = new Color(0.09f, 0.09f, 0.11f);
 
-    [Header("Prefab explosión fuego (Mirza Beig)")]
+    [Header("Prefab de explosión (Particle Pack)")]
     public GameObject explosionFirePrefab;
+    [Range(0.1f, 2f)] public float explosionScale = 0.55f;
 
     [Header("Textos del HUD (se crean en runtime si no existen)")]
     public TextMeshProUGUI controllerTimeText;
@@ -49,6 +50,7 @@ public class BombUI : MonoBehaviour
 
     private readonly List<Material> ledMats = new List<Material>();
     private Color bombBaseEmission;
+    private Color bombBaseColor;
 
     // HUDs
     private GameObject controllerHudGo;
@@ -63,7 +65,9 @@ public class BombUI : MonoBehaviour
     private TextMeshPro cameraTimeText;
     private TextMeshPro faceTimeText;
     private Coroutine feedbackRoutine;
+    private Coroutine strikeFlashRoutine;
     private Coroutine victoryRoutine;
+    private Coroutine explosionRoutine;
 
     private void Awake()
     {
@@ -76,7 +80,6 @@ public class BombUI : MonoBehaviour
 
         timer = bomb != null ? bomb.Timer : null;
         strikes = bomb != null ? bomb.Strikes : null;
-
         cables.Clear();
         cables.AddRange(FindObjectsByType<CablesModule>());
 
@@ -120,6 +123,8 @@ public class BombUI : MonoBehaviour
         if (bombBodyRenderer != null)
         {
             bombBodyRenderer.sharedMaterial = new Material(bombBodyRenderer.sharedMaterial);
+            bombBaseColor = bombBodyRenderer.sharedMaterial.HasProperty("_BaseColor")
+                ? bombBodyRenderer.sharedMaterial.GetColor("_BaseColor") : bombBodyColor;
             bombBaseEmission = Color.black;
         }
 
@@ -238,6 +243,8 @@ public class BombUI : MonoBehaviour
     public void ClearEventGlow()
     {
         eventGlowActive = false;
+        if (bombBodyRenderer != null && bombBodyRenderer.sharedMaterial.HasProperty("_BaseColor"))
+            bombBodyRenderer.sharedMaterial.SetColor("_BaseColor", bombBaseColor);
         UpdateBodyHighlight();
     }
 
@@ -245,6 +252,10 @@ public class BombUI : MonoBehaviour
     {
         if (bombBodyRenderer == null) return;
         bombBodyRenderer.sharedMaterial.EnableKeyword("_EMISSION");
+        // The base colour must change too: emission alone is hard to perceive
+        // on Quest when HDR/post-processing is disabled.
+        if (bombBodyRenderer.sharedMaterial.HasProperty("_BaseColor"))
+            bombBodyRenderer.sharedMaterial.SetColor("_BaseColor", eventGlowColor);
         bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", eventGlowColor * eventGlowIntensity);
     }
 
@@ -299,13 +310,14 @@ public class BombUI : MonoBehaviour
 
     private void UpdateStatus(BombState state)
     {
-        if (statusText == null) return;
-
         switch (state)
         {
             case BombState.Idle:
-                statusText.text = "ARMANDO BOMBA…";
-                statusText.color = Color.gray;
+                if (statusText != null)
+                {
+                    statusText.text = "ARMANDO BOMBA…";
+                    statusText.color = Color.gray;
+                }
                 break;
 
             case BombState.Running:
@@ -322,29 +334,41 @@ public class BombUI : MonoBehaviour
                     foreach (var s in simon) { if (s == null) continue; done += s.RoundsCompleted; total += s.TotalRounds; }
                     parts.Add($"simón {done}/{total}");
                 }
-                statusText.text = parts.Count > 0 ? "Resuelve: " + string.Join(" · ", parts) : "Resuelve los módulos";
-                statusText.color = Color.white;
+                if (statusText != null)
+                {
+                    statusText.text = parts.Count > 0 ? "Resuelve: " + string.Join(" · ", parts) : "Resuelve los módulos";
+                    statusText.color = Color.white;
+                }
                 break;
 
             case BombState.Finalizado:
-                statusText.text = "¡PULSA EL BOTÓN ROJO!";
-                statusText.color = new Color(1f, 0.55f, 0.2f);
+                if (statusText != null)
+                {
+                    statusText.text = "¡PULSA EL BOTÓN ROJO!";
+                    statusText.color = new Color(1f, 0.55f, 0.2f);
+                }
                 ShowFeedback("LISTO [OK]", new Color(1f, 0.75f, 0.2f));
                 SFX.Play(SfxType.Solved, 0.9f);
                 break;
 
             case BombState.Defused:
-                statusText.text = "BOMBA DESARMADA ✓";
-                statusText.color = new Color(0.35f, 1f, 0.4f);
+                if (statusText != null)
+                {
+                    statusText.text = "BOMBA DESARMADA ✓";
+                    statusText.color = new Color(0.35f, 1f, 0.4f);
+                }
                 ShowFeedback("¡VICTORIA! BOMBA DESARMADA", new Color(0.35f, 1f, 0.4f));
                 SFX.Play(SfxType.Solved, 0.9f);
                 victoryRoutine = StartCoroutine(VictorySequence());
                 break;
 
             case BombState.Exploded:
-                statusText.text = "BOOM";
-                statusText.color = new Color(1f, 0.2f, 0.15f);
-                StartCoroutine(ExplosionFx());
+                if (statusText != null)
+                {
+                    statusText.text = "BOOM";
+                    statusText.color = new Color(1f, 0.2f, 0.15f);
+                }
+                if (explosionRoutine == null) explosionRoutine = StartCoroutine(ExplosionFx());
                 break;
         }
     }
@@ -354,13 +378,15 @@ public class BombUI : MonoBehaviour
     private void OnStrikeAdded(int count)
     {
         UpdateLeds();
-        ShowFeedback("ERROR ¡BOOBY TRAP!", new Color(1f, 0.4f, 0.25f));
         SFX.Play(SfxType.Strike, 1f);
-        if (bombBodyRenderer != null)
-        {
-            StopAllCoroutines();
-            StartCoroutine(StrikeFlash());
-        }
+        PulseErrorVisual();
+    }
+
+    public void PulseErrorVisual()
+    {
+        if (bombBodyRenderer == null) return;
+        if (strikeFlashRoutine != null) StopCoroutine(strikeFlashRoutine);
+        strikeFlashRoutine = StartCoroutine(StrikeFlash());
     }
 
     private IEnumerator StrikeFlash()
@@ -376,6 +402,7 @@ public class BombUI : MonoBehaviour
         }
         flashActive = false;
         UpdateBodyHighlight();
+        strikeFlashRoutine = null;
     }
 
     // ------------------------------------------------------------------ Contacto (emisión del cubo)
@@ -503,11 +530,19 @@ public class BombUI : MonoBehaviour
         if (faceTimeText != null) faceTimeText.text = mmss;
         flashActive = false;
         eventGlowActive = false;
+        if (bombBodyRenderer != null && bombBodyRenderer.sharedMaterial.HasProperty("_BaseColor"))
+            bombBodyRenderer.sharedMaterial.SetColor("_BaseColor", bombBaseColor);
+        explosionRoutine = null;
         hgState = InteractableState.Normal;
         gState = InteractableState.Normal;
         UpdateBodyHighlight();
         StopAllCoroutines();
         CleanupVictoryScreen();
+        if (bomb != null)
+        {
+            foreach (Transform child in bomb.transform)
+                if (child != null) child.gameObject.SetActive(true);
+        }
         ShowFeedback("", Color.white);
     }
 
@@ -533,11 +568,34 @@ public class BombUI : MonoBehaviour
 
     private IEnumerator ExplosionFx()
     {
-        // 1. Instanciar prefab de explosión fuego
+        // Particle Pack samples are authored as looping demonstrations. Convert
+        // every child system to a finite one-shot when the bomb is lost.
         if (explosionFirePrefab != null && bomb != null)
         {
             GameObject explosion = Instantiate(explosionFirePrefab, bomb.transform.position, Quaternion.identity);
-            Destroy(explosion, 3f);
+            explosion.name = "BombLossExplosion";
+            explosion.transform.localScale = Vector3.one * explosionScale;
+            explosion.SetActive(false);
+
+            ParticleSystem[] systems = explosion.GetComponentsInChildren<ParticleSystem>(true);
+            float cleanupDelay = 1.5f;
+            foreach (ParticleSystem ps in systems)
+            {
+                if (ps == null) continue;
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                ParticleSystem.MainModule main = ps.main;
+                main.loop = false;
+                main.prewarm = false;
+                main.playOnAwake = false;
+                main.stopAction = ParticleSystemStopAction.None;
+                main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                cleanupDelay = Mathf.Max(cleanupDelay, main.duration + main.startLifetime.constantMax + 0.35f);
+            }
+
+            explosion.SetActive(true);
+            foreach (ParticleSystem ps in systems)
+                if (ps != null) ps.Play(false);
+            Destroy(explosion, Mathf.Min(cleanupDelay, 5f));
         }
 
         // 2. Pulso de escala + emisión en cuerpo de bomba (complemento)
@@ -582,6 +640,15 @@ public class BombUI : MonoBehaviour
             yield return null;
         }
         Destroy(flash.gameObject);
+
+        // Keep BombManager and BombHUD alive for the loss state, but hide the
+        // bomb body, modules and controls after the explosion effect.
+        if (bomb != null)
+        {
+            foreach (Transform child in bomb.transform)
+                if (child != null && child.name != "BombHUD") child.gameObject.SetActive(false);
+        }
+        explosionRoutine = null;
     }
 
     private IEnumerator VictorySequence()

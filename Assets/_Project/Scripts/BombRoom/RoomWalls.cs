@@ -12,6 +12,8 @@ public class RoomWalls : MonoBehaviour
     [Min(1f)] public float roomDepth = 2.2f;
     [Min(2f)] public float roomHeight = 2.4f;
     [Min(0.04f)] public float wallThickness = 0.10f;
+    [Min(2.4f)] public float floorWidth = 8f;
+    [Min(2.4f)] public float floorDepth = 8f;
     [Min(0.5f)] public float doorwayWidth = 0.80f;
     [Min(1.6f)] public float doorwayHeight = 2.05f;
     public bool createCeiling;
@@ -26,7 +28,12 @@ public class RoomWalls : MonoBehaviour
     {
         // Editor construction serializes the generated children. Runtime creates
         // them only for rooms instantiated dynamically without those children.
-        if (transform.Find(GeneratedRootName) == null)
+        Transform generated = transform.Find(GeneratedRootName);
+        Transform floor = generated != null ? generated.Find("RoomFloor") : null;
+        bool floorSizeChanged = floor == null ||
+            Mathf.Abs(floor.localScale.x - Mathf.Max(floorWidth, roomWidth + wallThickness * 2f)) > 0.01f ||
+            Mathf.Abs(floor.localScale.z - Mathf.Max(floorDepth, roomDepth + wallThickness * 2f)) > 0.01f;
+        if (generated == null || floorSizeChanged)
             RebuildGeometry();
     }
 
@@ -52,7 +59,8 @@ public class RoomWalls : MonoBehaviour
 
         // Floor interior aligns with y=0; the top surface is at y=0.
         CreatePanel(generated, "RoomFloor", new Vector3(0f, -halfT, 0f),
-            new Vector3(roomWidth + wallThickness * 2f, wallThickness, roomDepth + wallThickness * 2f), floorMaterial);
+            new Vector3(Mathf.Max(floorWidth, roomWidth + wallThickness * 2f), wallThickness,
+                Mathf.Max(floorDepth, roomDepth + wallThickness * 2f)), floorMaterial);
 
         // Side walls and rear wall surround the 2x2m clear interior.
         CreatePanel(generated, "Wall_Left",
@@ -93,6 +101,7 @@ public class RoomWalls : MonoBehaviour
                 new Vector3(0f, roomHeight + halfT, 0f),
                 new Vector3(roomWidth + wallThickness * 2f, wallThickness, roomDepth + wallThickness * 2f), wallMaterial);
         }
+
     }
 
     private static GameObject CreatePanel(Transform parent, string name, Vector3 localPosition, Vector3 size, Material material)

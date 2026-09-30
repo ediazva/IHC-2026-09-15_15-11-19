@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Oculus.Interaction;
 using Oculus.Interaction.HandGrab;
@@ -40,6 +41,7 @@ public class BatteryModule : ModuleBase
         public int colorIndex;
         public GameObject gameObject;
         public Rigidbody body;
+        public Collider collider;
         public GrabInteractable grab;
         public HandGrabInteractable handGrab;
         public Action<InteractableStateChangeArgs> grabHandler;
@@ -47,11 +49,14 @@ public class BatteryModule : ModuleBase
         public Vector3 homePosition;
         public Quaternion homeRotation;
         public bool installed;
+        public bool held;
     }
 
     private readonly List<CellItem> cells = new List<CellItem>();
     private readonly Transform[] sockets = new Transform[3];
     private readonly bool[] installed = new bool[3];
+    // true means the socket expects the positive terminal toward its local +X side.
+    private readonly bool[] positiveTowardRight = new bool[3];
     private readonly List<Material> generatedMaterials = new List<Material>();
     private Transform runtimeRoot;
     private Transform searchRoot;
@@ -71,6 +76,7 @@ public class BatteryModule : ModuleBase
     public override void ResetModule()
     {
         base.ResetModule();
+        StopAllCoroutines();
         ClearRuntimeObjects();
         BuildPuzzle();
     }
@@ -100,9 +106,13 @@ public class BatteryModule : ModuleBase
     private void CreateRearPanelAndSockets()
     {
         Material dark = CreateRuntimeMaterial(new Color(0.035f, 0.04f, 0.05f));
+        Material polarityMark = CreateRuntimeMaterial(new Color(0.95f, 0.95f, 0.82f), 1.1f);
         Material[] slotMaterials = new Material[CellColors.Length];
         for (int i = 0; i < CellColors.Length; i++)
+        {
             slotMaterials[i] = CreateRuntimeMaterial(CellColors[i], 0.25f);
+            positiveTowardRight[i] = UnityEngine.Random.value >= 0.5f;
+        }
 
         CreateCube(runtimeRoot, "BatteryPanel", new Vector3(0f, 0f, 0.008f),
             new Vector3(0.34f, 0.25f, 0.012f), dark);
@@ -116,6 +126,13 @@ public class BatteryModule : ModuleBase
                 new Vector3(x, 0f, -0.020f), new Vector3(0.052f, 0.075f, 0.012f), slotMaterials[i]);
             sockets[i] = socket.transform;
             socket.SetActive(true);
+
+            float positiveX = x + (positiveTowardRight[i] ? 0.014f : -0.014f);
+            float negativeX = x - (positiveTowardRight[i] ? 0.014f : -0.014f);
+            CreateSocketPolaritySymbol(runtimeRoot, $"Socket_{CellNames[i]}_Plus",
+                new Vector3(positiveX, 0f, -0.029f), true, polarityMark);
+            CreateSocketPolaritySymbol(runtimeRoot, $"Socket_{CellNames[i]}_Minus",
+                new Vector3(negativeX, 0f, -0.029f), false, polarityMark);
         }
     }
 
@@ -132,6 +149,9 @@ public class BatteryModule : ModuleBase
         }
 
         Material shelfMaterial = CreateRuntimeMaterial(new Color(0.16f, 0.18f, 0.21f));
+        Material positiveTerminal = CreateRuntimeMaterial(new Color(0.95f, 0.20f, 0.08f), 0.8f);
+        Material negativeTerminal = CreateRuntimeMaterial(new Color(0.16f, 0.18f, 0.21f), 0.15f);
+        Material polarityMark = CreateRuntimeMaterial(new Color(0.95f, 0.95f, 0.82f), 1.1f);
         Material[] cellMaterials = new Material[CellColors.Length];
         for (int i = 0; i < CellColors.Length; i++)
             cellMaterials[i] = CreateRuntimeMaterial(CellColors[i], 0.35f);
@@ -143,12 +163,14 @@ public class BatteryModule : ModuleBase
                 new Vector3(0.20f, 0.035f, 0.14f), shelfMaterial);
 
             Vector3 spawnWorld = roomWalls.transform.TransformPoint(shelfLocal + Vector3.up * 0.067f);
-            CellItem item = CreateCell(i, spawnWorld, cellMaterials[i]);
+            CellItem item = CreateCell(i, spawnWorld, cellMaterials[i],
+                positiveTerminal, negativeTerminal, polarityMark);
             cells.Add(item);
         }
     }
 
-    private CellItem CreateCell(int colorIndex, Vector3 worldPosition, Material material)
+    private CellItem CreateCell(int colorIndex, Vector3 worldPosition, Material material,
+        Material positiveTerminal, Material negativeTerminal, Material polarityMark)
     {
         GameObject cell = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         cell.name = $"Battery_{CellNames[colorIndex]}";
@@ -162,8 +184,11 @@ public class BatteryModule : ModuleBase
 
         Rigidbody rb = cell.GetComponent<Rigidbody>();
         if (rb == null) rb = cell.AddComponent<Rigidbody>();
-        rb.useGravity = true;
-        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        // Pickups are anchored/kinematic while resting, so they cannot fall
+        // through a shelf or the bomb. ISDK's grab transformer still moves them.
+        rb.useGravity = false;
+        rb.isKinematic = true;
+        rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
 
         Isdk.Grab(cell, rb);
@@ -175,20 +200,121 @@ public class BatteryModule : ModuleBase
             colorIndex = colorIndex,
             gameObject = cell,
             body = rb,
+            collider = cell.GetComponent<Collider>(),
             grab = grab,
             handGrab = handGrab,
             homePosition = worldPosition,
             homeRotation = cell.transform.rotation
         };
 
-        item.grabHandler = Isdk.Bind(grab, null, () => OnCellReleased(item), item.grabHandler);
-        item.handGrabHandler = Isdk.Bind(handGrab, null, () => OnCellReleased(item), item.handGrabHandler);
+        item.grabHandler = Isdk.Bind(grab,
+            () => item.held = true,
+            () => OnCellReleased(item), item.grabHandler);
+        item.handGrabHandler = Isdk.Bind(handGrab,
+            () => item.held = true,
+            () => OnCellReleased(item), item.handGrabHandler);
+
+        CreateCellPolarityMarks(cell.transform, positiveTerminal, negativeTerminal, polarityMark);
+        // Only the battery body is an interaction candidate. Decorative pole
+        // caps/signs are child meshes and must not steal the hand-grab pose.
+        Isdk.ScopeGrabColliders(grab, item.collider);
+        Isdk.ScopeHandGrabColliders(handGrab, item.collider);
+        StartCoroutine(KeepCellGrabScope(item));
         return item;
+    }
+
+    private IEnumerator KeepCellGrabScope(CellItem item)
+    {
+        // ISDK rebuilds its collider candidates in Start, which can overwrite
+        // the initial scope above. Reapply for the same startup window used by
+        // BombManager so the decorative polarity meshes never steal the grab.
+        for (int frame = 0; frame < 20; frame++)
+        {
+            if (item == null || item.gameObject == null || item.installed) yield break;
+            Isdk.ScopeGrabColliders(item.grab, item.collider);
+            Isdk.ScopeHandGrabColliders(item.handGrab, item.collider);
+            yield return null;
+        }
+    }
+
+    private void CreateCellPolarityMarks(Transform cell, Material positiveTerminal,
+        Material negativeTerminal, Material polarityMark)
+    {
+        CreateTerminalCap(cell, "PositiveTerminal", 0.92f, positiveTerminal);
+        CreateTerminalCap(cell, "NegativeTerminal", -0.92f, negativeTerminal);
+        CreateCellPolaritySymbol(cell, "PositiveMark", 0.985f, true, polarityMark);
+        CreateCellPolaritySymbol(cell, "NegativeMark", -0.985f, false, polarityMark);
+    }
+
+    private static void CreateTerminalCap(Transform parent, string name, float localY, Material material)
+    {
+        GameObject cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        cap.name = name;
+        cap.transform.SetParent(parent, false);
+        cap.transform.localPosition = new Vector3(0f, localY, 0f);
+        cap.transform.localScale = new Vector3(0.62f, 0.055f, 0.62f);
+        Collider collider = cap.GetComponent<Collider>();
+        if (collider != null)
+        {
+            collider.enabled = false;
+            Destroy(collider);
+        }
+        Renderer renderer = cap.GetComponent<Renderer>();
+        if (renderer != null) renderer.sharedMaterial = material;
+    }
+
+    private static void CreateCellPolaritySymbol(Transform parent, string name,
+        float localY, bool positive, Material material)
+    {
+        const float lineLength = 0.48f;
+        const float lineThickness = 0.07f;
+        CreateVisualCube(parent, $"{name}_Horizontal",
+            new Vector3(0f, localY, 0f), new Vector3(lineLength, lineThickness, lineThickness), material);
+        if (positive)
+        {
+            CreateVisualCube(parent, $"{name}_Vertical",
+                new Vector3(0f, localY, 0f), new Vector3(lineThickness, lineThickness, lineLength), material);
+        }
+    }
+
+    private static void CreateSocketPolaritySymbol(Transform parent, string name,
+        Vector3 localPosition, bool positive, Material material)
+    {
+        const float length = 0.012f;
+        const float thickness = 0.002f;
+        CreateVisualCube(parent, $"{name}_Horizontal", localPosition,
+            new Vector3(length, thickness, thickness), material);
+        if (positive)
+        {
+            CreateVisualCube(parent, $"{name}_Vertical", localPosition,
+                new Vector3(thickness, length, thickness), material);
+        }
+    }
+
+    private static GameObject CreateVisualCube(Transform parent, string name,
+        Vector3 localPosition, Vector3 localScale, Material material)
+    {
+        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        go.name = name;
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPosition;
+        go.transform.localRotation = Quaternion.identity;
+        go.transform.localScale = localScale;
+        Collider collider = go.GetComponent<Collider>();
+        if (collider != null)
+        {
+            collider.enabled = false;
+            Destroy(collider);
+        }
+        Renderer renderer = go.GetComponent<Renderer>();
+        if (renderer != null && material != null) renderer.sharedMaterial = material;
+        return go;
     }
 
     private void OnCellReleased(CellItem item)
     {
-        if (item == null || item.installed || IsSolved) return;
+        if (item == null || item.installed || IsSolved || !item.held) return;
+        item.held = false;
 
         float bestDistance = snapDistance;
         int nearestSocket = -1;
@@ -203,21 +329,33 @@ public class BatteryModule : ModuleBase
             }
         }
 
-        if (nearestSocket < 0) return;
+        if (nearestSocket < 0)
+        {
+            ReturnCellToShelf(item);
+            return;
+        }
 
-        if (nearestSocket != item.colorIndex)
+        if (nearestSocket != item.colorIndex || !HasCorrectPolarity(item, nearestSocket))
         {
             SFX.Play(SfxType.Denied, 0.55f);
             AddStrike();
-            item.body.linearVelocity = Vector3.zero;
-            item.body.angularVelocity = Vector3.zero;
-            item.body.isKinematic = true;
-            item.gameObject.transform.SetPositionAndRotation(item.homePosition, item.homeRotation);
-            item.body.isKinematic = false;
+            ReturnCellToShelf(item);
             return;
         }
 
         InstallCell(item, nearestSocket);
+    }
+
+    private bool HasCorrectPolarity(CellItem item, int socketIndex)
+    {
+        if (item == null || socketIndex < 0 || socketIndex >= sockets.Length || sockets[socketIndex] == null)
+            return false;
+
+        Vector3 batteryPositiveAxis = sockets[socketIndex].InverseTransformDirection(
+            item.gameObject.transform.up).normalized;
+        Vector3 expectedPositiveAxis = positiveTowardRight[socketIndex] ? Vector3.right : Vector3.left;
+        // Allow a small hand-alignment tolerance while still rejecting a reversed cell.
+        return Vector3.Dot(batteryPositiveAxis, expectedPositiveAxis) >= 0.82f;
     }
 
     private void InstallCell(CellItem item, int socketIndex)
@@ -228,10 +366,14 @@ public class BatteryModule : ModuleBase
         item.body.linearVelocity = Vector3.zero;
         item.body.angularVelocity = Vector3.zero;
         item.body.isKinematic = true;
+        item.body.useGravity = false;
         if (item.grab != null) item.grab.enabled = false;
         if (item.handGrab != null) item.handGrab.enabled = false;
+        if (item.collider != null) item.collider.enabled = false;
         item.gameObject.transform.SetParent(runtimeRoot, true);
-        item.gameObject.transform.SetPositionAndRotation(sockets[socketIndex].position, sockets[socketIndex].rotation);
+        Quaternion polarityRotation = sockets[socketIndex].rotation *
+            Quaternion.Euler(0f, 0f, positiveTowardRight[socketIndex] ? -90f : 90f);
+        item.gameObject.transform.SetPositionAndRotation(sockets[socketIndex].position, polarityRotation);
         SFX.Play(SfxType.Solved, 0.45f);
 
         if (installedCount >= CellColors.Length)
@@ -239,6 +381,16 @@ public class BatteryModule : ModuleBase
             SFX.Play(SfxType.Solved, 0.85f);
             Solve();
         }
+    }
+
+    private void ReturnCellToShelf(CellItem item)
+    {
+        item.body.linearVelocity = Vector3.zero;
+        item.body.angularVelocity = Vector3.zero;
+        item.body.useGravity = false;
+        item.body.isKinematic = true;
+        item.gameObject.transform.SetParent(searchRoot, true);
+        item.gameObject.transform.SetPositionAndRotation(item.homePosition, item.homeRotation);
     }
 
     private static GameObject CreateCube(Transform parent, string name, Vector3 localPosition, Vector3 scale, Material material)

@@ -33,6 +33,16 @@ public static class Isdk
     /// </summary>
     public static PokeInteractable Poke(GameObject go, Vector3 pokeLocalDir)
     {
+        return Poke(go, pokeLocalDir, PokePadding);
+    }
+
+    /// <summary>
+    /// Creates a poke surface with a per-button size allowance. A slightly
+    /// larger area makes compact physical buttons easier to press without
+    /// changing their visible geometry.
+    /// </summary>
+    public static PokeInteractable Poke(GameObject go, Vector3 pokeLocalDir, float extraPadding)
+    {
         PokeInteractable poke = go.GetComponent<PokeInteractable>();
 
         Vector2 area = PokeArea(go, pokeLocalDir);
@@ -56,7 +66,8 @@ public static class Isdk
         BoundsClipper clipper = surfaceGo.GetComponent<BoundsClipper>();
         if (clipper == null) clipper = surfaceGo.AddComponent<BoundsClipper>();
         float depth = Mathf.Max(area.x, area.y, 0.08f);
-        clipper.Size = new Vector3(area.x + PokePadding, area.y + PokePadding, depth * 4f);
+        float padding = Mathf.Max(0f, extraPadding);
+        clipper.Size = new Vector3(area.x + padding, area.y + padding, depth * 4f);
 
         PlaneSurface plane = surfaceGo.GetComponent<PlaneSurface>();
         if (plane == null) plane = surfaceGo.AddComponent<PlaneSurface>();
@@ -309,19 +320,22 @@ public static class Isdk
     private static Vector2 PokeArea(GameObject go, Vector3 pokeLocalDir)
     {
         Collider col = go.GetComponent<Collider>();
+        Vector3 scale = go.transform.lossyScale;
+        scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
         if (col is BoxCollider box)
         {
-            return TangentsArea(box.size, pokeLocalDir);
+            return TangentsArea(Vector3.Scale(box.size, scale), pokeLocalDir);
         }
         if (col is CapsuleCollider cap)
         {
-            return TangentsArea(new Vector3(cap.radius * 2f, cap.height, cap.radius * 2f), pokeLocalDir);
+            return TangentsArea(Vector3.Scale(new Vector3(cap.radius * 2f, cap.height, cap.radius * 2f), scale), pokeLocalDir);
         }
         if (col is SphereCollider sphere)
         {
-            return new Vector2(sphere.radius * 2f, sphere.radius * 2f);
+            float diameter = sphere.radius * 2f * Mathf.Max(scale.x, scale.y, scale.z);
+            return new Vector2(diameter, diameter);
         }
-        return TangentsArea(go.transform.localScale, pokeLocalDir);
+        return TangentsArea(scale, pokeLocalDir);
     }
 
     /// <summary>

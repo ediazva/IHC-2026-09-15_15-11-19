@@ -17,7 +17,7 @@ namespace VRInteractionPrototype
         [SerializeField]
         private float editorEyeHeight = 1.6f;
         [SerializeField]
-        private Vector3 editorStartPosition = new Vector3(0f, 1.6f, -1.35f);
+        private Vector3 editorStartPosition = new Vector3(0f, 1.6f, -2.35f);
         [SerializeField]
         private float editorMoveSpeed = 1.4f;
         [SerializeField]

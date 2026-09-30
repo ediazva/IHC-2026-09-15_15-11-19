@@ -74,7 +74,7 @@ public class HarassmentButton : MonoBehaviour
         if (highlight)
         {
             material.EnableKeyword("_EMISSION");
-            material.SetColor("_EmissionColor", buttonColor * 0.5f);
+            material.SetColor("_EmissionColor", buttonColor * 3f);
         }
         else
         {

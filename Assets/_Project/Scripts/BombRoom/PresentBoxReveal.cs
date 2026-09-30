@@ -40,7 +40,7 @@ public class PresentBoxReveal : MonoBehaviour
     [Header("Touch reveal")]
     [Min(0.1f)] public float revealTransitionDuration = 0.55f;
     public Color giftGlowColor = new Color(1f, 0.72f, 0.18f);
-    [Min(0f)] public float giftGlowIntensity = 1.5f;
+    [Min(0f)] public float giftGlowIntensity = 3f;
 
     private Vector3 laceStartPosition;
     private Vector3 bombRestPosition;

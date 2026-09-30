@@ -322,6 +322,9 @@ public static class BombRoomSetup
         top.transform.localPosition = new Vector3(0f, 0.74f, 0f);
         top.transform.localScale = new Vector3(0.86f, 0.08f, 0.70f);
         top.GetComponent<Renderer>().sharedMaterial = GetMaterial("Mat_TableTop", new Color(0.22f, 0.16f, 0.11f));
+        BoxCollider topCollider = top.GetComponent<BoxCollider>();
+        topCollider.enabled = true;
+        topCollider.isTrigger = false;
 
         Material legs = GetMaterial("Mat_TableLegs", new Color(0.12f, 0.095f, 0.075f));
         for (int x = -1; x <= 1; x += 2)
@@ -542,6 +545,9 @@ public static class BombRoomSetup
         float metallic = source != null && source.HasProperty("_Metallic") ? source.GetFloat("_Metallic") : 0f;
         float smoothness = source != null && source.HasProperty("_Glossiness") ? source.GetFloat("_Glossiness") : 0.35f;
         Material result = GetMaterial("Mat_Present_Urp", color, metallic: metallic, smoothness: smoothness);
+        // The present pulses only at runtime. Keep the emission variant in the
+        // Android build even though its authored emission starts at black.
+        result.EnableKeyword("_EMISSION");
 
         if (source != null)
         {
@@ -1003,6 +1009,7 @@ public static class BombRoomSetup
         // is actually rendered in both eyes.
         foreach (Camera sceneCamera in Object.FindObjectsByType<Camera>())
         {
+            sceneCamera.allowHDR = true;
             var cameraData = sceneCamera.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
             if (cameraData != null) cameraData.renderPostProcessing = true;
         }

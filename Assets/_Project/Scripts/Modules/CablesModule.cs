@@ -62,6 +62,10 @@ public class CablesModule : ModuleBase
         [NonSerialized] public Action<InteractableStateChangeArgs> handGrabHandler;
         [NonSerialized] public Material plugMaterial;
         [NonSerialized] public Material stubMaterial;
+        [NonSerialized] public Material socketMaterial;
+        [NonSerialized] public Color socketRestEmission;
+        [NonSerialized] public bool held;
+        [NonSerialized] public bool socketHighlighted;
         public Material material => plugMaterial;
     }
 
@@ -94,12 +98,29 @@ public class CablesModule : ModuleBase
     public override void ResetModule()
     {
         base.ResetModule();
+        ReleaseSocketMaterials();
         for (int i = transform.childCount - 1; i >= 0; i--)
             Destroy(transform.GetChild(i).gameObject);
 
         cables.Clear();
         connectedCount = 0;
         Build();
+    }
+
+    private void OnDestroy()
+    {
+        ReleaseSocketMaterials();
+    }
+
+    private void ReleaseSocketMaterials()
+    {
+        foreach (CableState cable in cables)
+        {
+            if (cable == null || cable.socketMaterial == null) continue;
+            if (Application.isPlaying) Destroy(cable.socketMaterial);
+            else DestroyImmediate(cable.socketMaterial);
+            cable.socketMaterial = null;
+        }
     }
 
     // ------------------------------------------------------------------ Autorado en el editor
@@ -118,6 +139,8 @@ public class CablesModule : ModuleBase
     private void PrepareCable(CableState cable)
     {
         cable.connected = false;
+        cable.held = false;
+        cable.socketHighlighted = false;
 
         // Asegurar que plug está unido como hijo de stub para que se muevan siempre juntos
         if (cable.plug.transform.parent != cable.stub.transform)
@@ -178,6 +201,19 @@ public class CablesModule : ModuleBase
             else
                 cable.stubMaterial = Fx.Lit(cable.color);
             rendStub.sharedMaterial = cable.stubMaterial;
+        }
+
+        // Scene-authored sockets share their material with other pieces. Give
+        // each one its own emission so only the matching socket lights up.
+        Renderer rendSocket = cable.socket != null ? cable.socket.GetComponent<Renderer>() : null;
+        if (rendSocket != null)
+        {
+            cable.socketMaterial = rendSocket.sharedMaterial != null
+                ? new Material(rendSocket.sharedMaterial)
+                : Fx.Lit(cable.color);
+            rendSocket.sharedMaterial = cable.socketMaterial;
+            cable.socketRestEmission = cable.socketMaterial.HasProperty("_EmissionColor")
+                ? cable.socketMaterial.GetColor("_EmissionColor") : Color.black;
         }
 
         // Rigidbody kinemático en stub
@@ -337,12 +373,14 @@ public class CablesModule : ModuleBase
     private void OnPlugGrabbed(CableState cable)
     {
         if (cable == null || cable.connected) return;
+        cable.held = true;
         SetEmission(cable, 1.6f);
     }
 
     private void OnPlugReleased(CableState cable)
     {
         if (cable == null || cable.connected) return;
+        cable.held = false;
 
         Vector3 plugPos = cable.plug.transform.position;
         CableState nearest = null;
@@ -364,6 +402,7 @@ public class CablesModule : ModuleBase
 
         if (nearest == null)
         {
+            SetSocketHighlight(cable, false);
             SetEmission(cable, 0.25f);
             ReturnHome(cable);
             return;
@@ -375,6 +414,7 @@ public class CablesModule : ModuleBase
         }
         else
         {
+            SetSocketHighlight(cable, false);
             SetEmission(cable, 0.25f);
             OnCableWrong?.Invoke();
             SFX.Play(SfxType.Denied, 0.6f);
@@ -399,7 +439,8 @@ public class CablesModule : ModuleBase
         cable.stub.transform.position += delta;
 
         SetEmission(cable, 2.2f);
-        SFX.Play(SfxType.Snip, 0.8f);
+        SetSocketHighlight(cable, true);
+        SFX.Play(SfxType.Connected, 0.65f);
 
         OnCableConnected?.Invoke(cable.color);
 
@@ -428,12 +469,46 @@ public class CablesModule : ModuleBase
         }
     }
 
+    private static bool IsPlugTouchingSocket(CableState cable)
+    {
+        if (cable?.plug == null || cable.socket == null) return false;
+        SphereCollider plugCollider = cable.plug.GetComponent<SphereCollider>();
+        if (plugCollider == null) return false;
+
+        // Sockets are visual-only (no collider): test the plug sphere against
+        // the socket cube without letting physics push the held cable away.
+        Transform plug = cable.plug.transform;
+        Transform socket = cable.socket.transform;
+        Vector3 plugCenter = plug.TransformPoint(plugCollider.center);
+        Vector3 local = socket.InverseTransformPoint(plugCenter);
+        Vector3 closest = socket.TransformPoint(new Vector3(
+            Mathf.Clamp(local.x, -0.5f, 0.5f),
+            Mathf.Clamp(local.y, -0.5f, 0.5f),
+            Mathf.Clamp(local.z, -0.5f, 0.5f)));
+        Vector3 scale = plug.lossyScale;
+        float radius = plugCollider.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)) + 0.002f;
+        return (plugCenter - closest).sqrMagnitude <= radius * radius;
+    }
+
+    private static void SetSocketHighlight(CableState cable, bool highlight)
+    {
+        if (cable?.socketMaterial == null || (cable.socketHighlighted == highlight && !cable.connected)) return;
+        cable.socketHighlighted = highlight;
+        cable.socketMaterial.EnableKeyword("_EMISSION");
+        cable.socketMaterial.SetColor("_EmissionColor", cable.connected
+            ? cable.color * 4f
+            : highlight ? cable.color * 3f : cable.socketRestEmission);
+    }
+
     private void LateUpdate()
     {
         for (int i = 0; i < cables.Count; i++)
         {
             CableState cable = cables[i];
             if (cable == null || cable.cord == null || cable.stubTip == null || cable.stub == null || cable.plug == null) continue;
+
+            if (cable.held && !cable.connected)
+                SetSocketHighlight(cable, IsPlugTouchingSocket(cable));
 
             cable.cord.SetPosition(0, cable.stubTip.position);
 

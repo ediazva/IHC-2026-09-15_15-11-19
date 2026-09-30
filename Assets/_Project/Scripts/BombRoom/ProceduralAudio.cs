@@ -8,7 +8,8 @@ public enum SfxType
     Strike,
     Solved,
     Explosion,
-    Denied
+    Denied,
+    Connected
 }
 
 /// <summary>
@@ -62,6 +63,7 @@ public static class SFX
             SfxType.Solved => Chord(new[] { 660f, 880f, 1320f }, 0.35f, 0.4f),
             SfxType.Explosion => ExplosionClip(),
             SfxType.Denied => Sine(150f, 0.14f, 0.7f),
+            SfxType.Connected => ConnectedClip(),
             _ => null
         };
 
@@ -80,6 +82,24 @@ public static class SFX
             data[i] = Mathf.Sin(step * i) * env;
         }
         return Make("sine", data, duration);
+    }
+
+    private static AudioClip ConnectedClip()
+    {
+        const float duration = 0.24f;
+        int n = Mathf.CeilToInt(duration * SampleRate);
+        float[] data = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            float t = i / (float)SampleRate;
+            float noteTime = t < 0.105f ? t : t - 0.105f;
+            float frequency = t < 0.105f ? 660f : 990f;
+            float noteLength = t < 0.105f ? 0.105f : duration - 0.105f;
+            float envelope = Mathf.Min(1f, noteTime * 150f) * Mathf.Exp(-13f * noteTime) *
+                Mathf.Clamp01((noteLength - noteTime) * 90f);
+            data[i] = Mathf.Sin(2f * Mathf.PI * frequency * noteTime) * envelope * 0.6f;
+        }
+        return Make("connected", data, duration);
     }
 
     private static AudioClip Buzz(float freq, float duration, float decay)

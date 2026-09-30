@@ -46,8 +46,6 @@ public class BatteryModule : ModuleBase
         public HandGrabInteractable handGrab;
         public Action<InteractableStateChangeArgs> grabHandler;
         public Action<InteractableStateChangeArgs> handGrabHandler;
-        public Vector3 homePosition;
-        public Quaternion homeRotation;
         public bool installed;
         public bool held;
     }
@@ -184,10 +182,11 @@ public class BatteryModule : ModuleBase
 
         Rigidbody rb = cell.GetComponent<Rigidbody>();
         if (rb == null) rb = cell.AddComponent<Rigidbody>();
-        // Pickups are anchored/kinematic while resting, so they cannot fall
-        // through a shelf or the bomb. ISDK's grab transformer still moves them.
-        rb.useGravity = false;
-        rb.isKinematic = true;
+        // Grabbable locks the body to kinematic only while held. Once released,
+        // gravity and collisions let it land on shelves, the table or the floor.
+        rb.mass = 0.08f;
+        rb.useGravity = true;
+        rb.isKinematic = false;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
 
@@ -202,9 +201,7 @@ public class BatteryModule : ModuleBase
             body = rb,
             collider = cell.GetComponent<Collider>(),
             grab = grab,
-            handGrab = handGrab,
-            homePosition = worldPosition,
-            homeRotation = cell.transform.rotation
+            handGrab = handGrab
         };
 
         item.grabHandler = Isdk.Bind(grab,
@@ -329,21 +326,26 @@ public class BatteryModule : ModuleBase
             }
         }
 
-        if (nearestSocket < 0)
-        {
-            ReturnCellToShelf(item);
-            return;
-        }
+        if (nearestSocket < 0) return;
 
         if (nearestSocket != item.colorIndex || !HasCorrectPolarity(item, nearestSocket))
         {
             SFX.Play(SfxType.Denied, 0.55f);
             AddStrike();
-            ReturnCellToShelf(item);
             return;
         }
 
-        InstallCell(item, nearestSocket);
+        StartCoroutine(InstallCellAfterRelease(item, nearestSocket));
+    }
+
+    private IEnumerator InstallCellAfterRelease(CellItem item, int socketIndex)
+    {
+        // ISDK restores the pre-grab dynamic state after notifying listeners of
+        // release. Wait for that unlock before making an installed cell static.
+        yield return null;
+        if (item == null || item.gameObject == null || item.installed || item.held || installed[socketIndex])
+            yield break;
+        InstallCell(item, socketIndex);
     }
 
     private bool HasCorrectPolarity(CellItem item, int socketIndex)
@@ -381,16 +383,6 @@ public class BatteryModule : ModuleBase
             SFX.Play(SfxType.Solved, 0.85f);
             Solve();
         }
-    }
-
-    private void ReturnCellToShelf(CellItem item)
-    {
-        item.body.linearVelocity = Vector3.zero;
-        item.body.angularVelocity = Vector3.zero;
-        item.body.useGravity = false;
-        item.body.isKinematic = true;
-        item.gameObject.transform.SetParent(searchRoot, true);
-        item.gameObject.transform.SetPositionAndRotation(item.homePosition, item.homeRotation);
     }
 
     private static GameObject CreateCube(Transform parent, string name, Vector3 localPosition, Vector3 scale, Material material)

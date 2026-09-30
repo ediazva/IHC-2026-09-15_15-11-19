@@ -36,6 +36,7 @@ public class HarassmentButton : MonoBehaviour
 
     private void HandlePress()
     {
+        SFX.Play(SfxType.Tick, 0.7f);
         OnPressed?.Invoke(this);
         PulseFeedback();
     }

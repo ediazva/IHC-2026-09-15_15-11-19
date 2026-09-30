@@ -63,6 +63,15 @@ public static class Isdk
         surfaceGo.transform.position = go.transform.position + worldDir * halfThickness;
         surfaceGo.transform.rotation = look;
 
+        // BoundsClipper.Size is in metres. Cancel the button mesh scale along
+        // each of the rotated surface axes (START has a different Z width), or
+        // the active area collapses around the centre of the visible button.
+        Quaternion localRotation = surfaceGo.transform.localRotation;
+        surfaceGo.transform.localScale = new Vector3(
+            1f / Mathf.Max(0.0001f, go.transform.TransformVector(localRotation * Vector3.right).magnitude),
+            1f / Mathf.Max(0.0001f, go.transform.TransformVector(localRotation * Vector3.up).magnitude),
+            1f / Mathf.Max(0.0001f, go.transform.TransformVector(localRotation * Vector3.forward).magnitude));
+
         BoundsClipper clipper = surfaceGo.GetComponent<BoundsClipper>();
         if (clipper == null) clipper = surfaceGo.AddComponent<BoundsClipper>();
         float depth = Mathf.Max(area.x, area.y, 0.08f);
@@ -309,9 +318,17 @@ public static class Isdk
     private static float PokeThickness(GameObject go, Vector3 worldDir)
     {
         Vector3 n = worldDir.normalized;
-        Vector3 size;
         Collider col = go.GetComponent<Collider>();
-        size = col != null ? col.bounds.size : go.transform.localScale;
+        if (col is BoxCollider box)
+        {
+            // Project the actual box onto the face normal; an axis-aligned world
+            // bounds overestimates thickness for buttons on rotated walls.
+            Vector3 x = go.transform.TransformVector(Vector3.right * box.size.x);
+            Vector3 y = go.transform.TransformVector(Vector3.up * box.size.y);
+            Vector3 z = go.transform.TransformVector(Vector3.forward * box.size.z);
+            return Mathf.Abs(Vector3.Dot(x, n)) + Mathf.Abs(Vector3.Dot(y, n)) + Mathf.Abs(Vector3.Dot(z, n));
+        }
+        Vector3 size = col != null ? col.bounds.size : go.transform.lossyScale;
         return Mathf.Abs(size.x) * Mathf.Abs(n.x)
              + Mathf.Abs(size.y) * Mathf.Abs(n.y)
              + Mathf.Abs(size.z) * Mathf.Abs(n.z);

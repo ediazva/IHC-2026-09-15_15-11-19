@@ -4265,6 +4265,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: GiftPresentModel
       objectReference: {fileID: 0}
+    - target: {fileID: 176482, guid: fe1bac696975c4932b5f99db90ec1396, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 489990, guid: fe1bac696975c4932b5f99db90ec1396, type: 3}
       propertyPath: m_LocalScale.x
       value: 120
@@ -7104,7 +7108,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0853e162119e54cc8832f12e8d1a5b85, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HarassmentEvent
-  bomb: {fileID: 547652243}
   initialEventMinDelay: 2
   initialEventMaxDelay: 3
   minInterval: 8
@@ -7119,6 +7122,7 @@ MonoBehaviour:
   timeoutPenaltySeconds: 30
   obscuredVignette: 0.395
   obscuredExposure: 0
+  bomb: {fileID: 547652243}
   buttons:
   - {fileID: 1569433734}
   - {fileID: 125478422}

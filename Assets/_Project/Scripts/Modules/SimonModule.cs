@@ -228,7 +228,7 @@ public class SimonModule : ModuleBase
         if (button == null || button.pressed) return;
         button.pressed = true;
         SetButtonPressed(button, true);
-        SFX.Tone(460f, 0.045f, 0.22f, 18f);
+        SFX.Play(SfxType.Tick, 0.7f);
         PressButton(index);
     }
 
@@ -252,6 +252,7 @@ public class SimonModule : ModuleBase
         startButtonPressed = true;
         if (startVisual != null)
             startVisual.localPosition = startVisualRestLocalPosition + Vector3.right * pressDepth;
+        SFX.Play(SfxType.Tick, 0.7f);
         PressStart();
     }
 

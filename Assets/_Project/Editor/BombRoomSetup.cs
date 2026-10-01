@@ -759,7 +759,7 @@ public static class BombRoomSetup
         startBtn.transform.localPosition = new Vector3(SimonModule.Layout.FaceX, -0.085f, 0f);
         startBtn.transform.localScale = new Vector3(SimonModule.Layout.ButtonSize, SimonModule.Layout.ButtonSize, 0.11f);
         startBtn.GetComponent<Renderer>().sharedMaterial =
-            GetMaterial("Mat_SimonStart", new Color(0.13f, 0.72f, 0.38f), 0.4f);
+            GetMaterial("Mat_SimonStart", Color.white, 0.4f);
 
         Isdk.Poke(startBtn, new Vector3(-1f, 0f, 0f));
 
@@ -771,8 +771,9 @@ public static class BombRoomSetup
         labelGo.transform.localScale = new Vector3(0.0007f, 0.0007f, 0.0007f);
         Canvas canvas = labelGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
-        TextMeshProUGUI text = CreateText(labelGo.transform, "StartText", new Vector2(0f, 0f), new Vector2(200f, 100f), 36f, Color.white);
+        TextMeshProUGUI text = CreateText(labelGo.transform, "StartText", new Vector2(0f, 0f), new Vector2(200f, 100f), 36f, Color.black);
         text.text = "INICIAR";
+        text.outlineWidth = 0f;
         text.textWrappingMode = TextWrappingModes.NoWrap;
         text.overflowMode = TextOverflowModes.Overflow;
 
@@ -1018,13 +1019,8 @@ public static class BombRoomSetup
         visGo.transform.SetParent(root.transform, false);
         VisibilityController vis = visGo.AddComponent<VisibilityController>();
         vis.volume = volume;
-        vis.blackoutShader = AssetDatabase.LoadAssetAtPath<Shader>(
-            "Assets/_Project/Materials/BombRoom/XRBlackout.shader");
-        vis.obscuredVignette = 0.92f;
-        vis.obscuredPostExposure = 0f;
-        vis.fullViewOverlayOpacity = 1f;
-        vis.centerApertureRadius = 0.18f;
-        vis.apertureEdgeSoftness = 0.012f;
+        vis.obscuredVignette = 0f;
+        vis.obscuredPostExposure = -1.5f;
         vis.fadeInSeconds = 0.08f;
         vis.fadeOutSeconds = 0.25f;
 
@@ -1035,10 +1031,12 @@ public static class BombRoomSetup
         evt.buttons = buttons;
         evt.visibilityController = vis;
         evt.bombBodyRenderer = bombBodyRenderer;
-        evt.initialEventMinDelay = 2f;
-        evt.initialEventMaxDelay = 3f;
-        evt.minInterval = 8f;
-        evt.maxInterval = 14f;
+        evt.initialEventMinDelay = 25f;
+        evt.initialEventMaxDelay = 40f;
+        evt.minInterval = 45f;
+        evt.maxInterval = 75f;
+        evt.chainProbability = 0f;
+        evt.maxConsecutiveChains = 0;
         evt.targetCueSeconds = 1.1f;
         evt.obscuredVignette = vis.obscuredVignette;
         evt.obscuredExposure = vis.obscuredPostExposure;

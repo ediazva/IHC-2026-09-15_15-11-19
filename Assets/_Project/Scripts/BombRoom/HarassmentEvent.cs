@@ -8,15 +8,15 @@ using System.Collections;
 public class HarassmentEvent : MonoBehaviour
 {
     [Header("Random timing (only while the bomb is Running)")]
-    [Min(1f)] public float initialEventMinDelay = 3f;
-    [Min(1f)] public float initialEventMaxDelay = 5f;
-    [Min(1f)] public float minInterval = 16f;
-    [Min(1f)] public float maxInterval = 28f;
+    [Min(1f)] public float initialEventMinDelay = 25f;
+    [Min(1f)] public float initialEventMaxDelay = 40f;
+    [Min(1f)] public float minInterval = 45f;
+    [Min(1f)] public float maxInterval = 75f;
     [Min(1f)] public float minTimeToPress = 6f;
     [Min(1f)] public float maxTimeToPress = 22f;
     [Min(0f)] public float targetCueSeconds = 1.1f;
-    [Range(0f, 1f)] public float chainProbability = 0.15f;
-    [Min(0)] public int maxConsecutiveChains = 1;
+    [Range(0f, 1f)] public float chainProbability = 0f;
+    [Min(0)] public int maxConsecutiveChains = 0;
 
     [Header("Consequences")]
     public float correctBonusSeconds = 10f;
@@ -24,8 +24,8 @@ public class HarassmentEvent : MonoBehaviour
     public float timeoutPenaltySeconds = 15f;
 
     [Header("Vision effect")]
-    [Range(0f, 1f)] public float obscuredVignette = 0.78f;
-    [Range(-5f, 0f)] public float obscuredExposure = 0f;
+    [Range(0f, 1f)] public float obscuredVignette = 0f;
+    [Range(-5f, 0f)] public float obscuredExposure = -1.5f;
 
     [Header("References (assigned by the room builder)")]
     public BombManager bomb;
@@ -202,7 +202,9 @@ public class HarassmentEvent : MonoBehaviour
     {
         yield return new WaitForSeconds(targetCueSeconds);
         obscureRoutine = null;
-        if (targetButton != null) targetButton.SetHighlight(false);
+        if (bombUI != null) bombUI.ClearEventGlow();
+        else if (bombBodyRenderer != null)
+            bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", Color.black);
         if (eventActive && bomb != null && bomb.State == BombState.Running && visibilityController != null)
             visibilityController.SetObscured(true);
     }

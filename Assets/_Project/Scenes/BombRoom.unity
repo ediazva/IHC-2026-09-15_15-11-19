@@ -1197,7 +1197,7 @@ Transform:
   m_GameObject: {fileID: 219654124}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.052, z: -2.35}
+  m_LocalPosition: {x: 0, y: 0.978, z: -2.389}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3041,12 +3041,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VisibilityController
   volume: {fileID: 1896183259}
-  blackoutShader: {fileID: 4800000, guid: 30f723fe591c40f9a2017f4d81d3a0c4, type: 3}
-  obscuredVignette: 0.92
-  obscuredPostExposure: 0
-  fullViewOverlayOpacity: 1
-  centerApertureRadius: 0.18
-  apertureEdgeSoftness: 0.012
+  obscuredVignette: 0
+  obscuredPostExposure: -1.5
   fadeInSeconds: 0.08
   fadeOutSeconds: 0.25
 --- !u!4 &693998839
@@ -5670,7 +5666,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
   m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -5686,8 +5682,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -7108,20 +7104,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0853e162119e54cc8832f12e8d1a5b85, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HarassmentEvent
-  initialEventMinDelay: 2
-  initialEventMaxDelay: 3
-  minInterval: 8
-  maxInterval: 14
+  initialEventMinDelay: 30
+  initialEventMaxDelay: 30
+  minInterval: 30
+  maxInterval: 40
   minTimeToPress: 6
   maxTimeToPress: 22
   targetCueSeconds: 1.1
-  chainProbability: 0.75
-  maxConsecutiveChains: 1
+  chainProbability: 0
+  maxConsecutiveChains: 0
   correctBonusSeconds: 10
   wrongButtonPenaltySeconds: 15
-  timeoutPenaltySeconds: 30
-  obscuredVignette: 0.395
-  obscuredExposure: 0
+  timeoutPenaltySeconds: 15
+  obscuredVignette: 0
+  obscuredExposure: -1.5
   bomb: {fileID: 547652243}
   buttons:
   - {fileID: 1569433734}
@@ -8438,8 +8434,6 @@ MonoBehaviour:
   bombBodyColor: {r: 0.09, g: 0.09, b: 0.11, a: 1}
   explosionFirePrefab: {fileID: 1828176872806910, guid: 64891a0eb28db934898420d80ca07cb3, type: 3}
   explosionScale: 0.55
-  controllerTimeText: {fileID: 0}
-  cubeTimeText: {fileID: 0}
   statusText: {fileID: 0}
   feedbackText: {fileID: 0}
 --- !u!1 &1795408485
@@ -10421,10 +10415,18 @@ PrefabInstance:
       propertyPath: m_LocalPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6147449420076126351, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 6267690530596161800, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _ovrCameraRig
       value: 
       objectReference: {fileID: 219654127}
+    - target: {fileID: 8702425413754196323, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8839895569409382208, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: m_IsActive
       value: 0
@@ -10436,6 +10438,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 4148778239110795873, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       insertIndex: 1
       addedObject: {fileID: 2072750965}
+    - targetCorrespondingSourceObject: {fileID: 4148778239110795873, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2072750966}
   m_SourcePrefab: {fileID: 100100000, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
 --- !u!4 &2072750963 stripped
 Transform:
@@ -10465,6 +10470,18 @@ MonoBehaviour:
   installationRoutineCheckpoint:
     _installationRoutineId: 2063f481-1b63-4eda-9ee8-a00df98536bc
     _installationVariants: []
+--- !u!114 &2072750966
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2072750964}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9f577a415f1a41e3845bc974d7331a20, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SuppressMetaHandReticles
 --- !u!1 &2098594661
 GameObject:
   m_ObjectHideFlags: 0

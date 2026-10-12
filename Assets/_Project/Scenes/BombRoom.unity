@@ -3041,8 +3041,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::VisibilityController
   volume: {fileID: 1896183259}
-  obscuredVignette: 0
-  obscuredPostExposure: -1.5
+  obscuredVignette: 0.2
+  obscuredPostExposure: -2
   fadeInSeconds: 0.08
   fadeOutSeconds: 0.25
 --- !u!4 &693998839
@@ -7110,14 +7110,14 @@ MonoBehaviour:
   maxInterval: 40
   minTimeToPress: 6
   maxTimeToPress: 22
-  targetCueSeconds: 1.1
+  targetCueSeconds: 3
   chainProbability: 0
   maxConsecutiveChains: 0
   correctBonusSeconds: 10
   wrongButtonPenaltySeconds: 15
   timeoutPenaltySeconds: 15
-  obscuredVignette: 0
-  obscuredExposure: -1.5
+  obscuredVignette: 0.2
+  obscuredExposure: -2
   bomb: {fileID: 547652243}
   buttons:
   - {fileID: 1569433734}
@@ -8434,6 +8434,8 @@ MonoBehaviour:
   bombBodyColor: {r: 0.09, g: 0.09, b: 0.11, a: 1}
   explosionFirePrefab: {fileID: 1828176872806910, guid: 64891a0eb28db934898420d80ca07cb3, type: 3}
   explosionScale: 0.55
+  confettiPrefab: {fileID: 4812777098084798749, guid: a24db55e1f9277f459f8a602b53a9bb0, type: 3}
+  victoryConfettiSeconds: 2.5
   statusText: {fileID: 0}
   feedbackText: {fileID: 0}
 --- !u!1 &1795408485

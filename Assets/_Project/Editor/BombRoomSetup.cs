@@ -471,6 +471,12 @@ public static class BombRoomSetup
             Debug.LogWarning("[BombRoomSetup] Particle Pack SmallExplosion prefab not found; the bomb loss still uses the procedural flash.");
         }
 
+        hud.confettiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+            "Assets/VRTemplateAssets/Prefabs/Blaster/Confetti.prefab");
+        hud.victoryConfettiSeconds = 2.5f;
+        if (hud.confettiPrefab == null)
+            Debug.LogWarning("[BombRoomSetup] No se encontró el prefab de confeti para Simón y la victoria.");
+
         // --- Botón de activación en la Cara Superior (se enciende al terminar).
         BuildArmButton(bomb.transform, manager, buttonMat);
 
@@ -1019,8 +1025,8 @@ public static class BombRoomSetup
         visGo.transform.SetParent(root.transform, false);
         VisibilityController vis = visGo.AddComponent<VisibilityController>();
         vis.volume = volume;
-        vis.obscuredVignette = 0f;
-        vis.obscuredPostExposure = -1.5f;
+        vis.obscuredVignette = 0.2f;
+        vis.obscuredPostExposure = -2f;
         vis.fadeInSeconds = 0.08f;
         vis.fadeOutSeconds = 0.25f;
 
@@ -1037,7 +1043,7 @@ public static class BombRoomSetup
         evt.maxInterval = 75f;
         evt.chainProbability = 0f;
         evt.maxConsecutiveChains = 0;
-        evt.targetCueSeconds = 1.1f;
+        evt.targetCueSeconds = 3f;
         evt.obscuredVignette = vis.obscuredVignette;
         evt.obscuredExposure = vis.obscuredPostExposure;
     }

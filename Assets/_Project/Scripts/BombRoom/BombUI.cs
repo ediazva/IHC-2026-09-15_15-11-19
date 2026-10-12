@@ -25,6 +25,10 @@ public class BombUI : MonoBehaviour
     public GameObject explosionFirePrefab;
     [Range(0.1f, 2f)] public float explosionScale = 0.55f;
 
+    [Header("Confeti de Simón y victoria")]
+    public GameObject confettiPrefab;
+    [Min(0f)] public float victoryConfettiSeconds = 2.5f;
+
     [Header("Textos del HUD (se crean en runtime si no existen)")]
     public TextMeshProUGUI controllerTimeText;
     public TextMeshProUGUI cubeTimeText;
@@ -37,6 +41,7 @@ public class BombUI : MonoBehaviour
     private readonly List<SimonModule> simon = new List<SimonModule>();
     private readonly List<BombArmButton> armButtons = new List<BombArmButton>();
     private readonly List<MazeModule> mazes = new List<MazeModule>();
+    private readonly List<GameObject> activeConfetti = new List<GameObject>();
 
     // Emisión del cuerpo del cubo (hover/select)
     private HandGrabInteractable bodyHandGrab;
@@ -217,6 +222,7 @@ public class BombUI : MonoBehaviour
     private void OnDestroy()
     {
         Unsubscribe();
+        ClearConfetti();
     }
 
     public void SetGlowColor(Color color, float intensity = 1.5f)
@@ -359,7 +365,8 @@ public class BombUI : MonoBehaviour
                 }
                 ShowFeedback("¡VICTORIA! BOMBA DESARMADA", new Color(0.35f, 1f, 0.4f));
                 SFX.Play(SfxType.Solved, 0.9f);
-                victoryRoutine = StartCoroutine(VictorySequence());
+                if (victoryRoutine == null && victoryScreenGo == null)
+                    victoryRoutine = StartCoroutine(VictorySequence());
                 break;
 
             case BombState.Exploded:
@@ -499,6 +506,65 @@ public class BombUI : MonoBehaviour
     {
         ShowFeedback("SIMON OK!", new Color(0.35f, 1f, 0.4f));
         RefreshStatus();
+
+        foreach (SimonModule module in simon)
+        {
+            if (module == null || module.RoundsCompleted < module.TotalRounds) continue;
+            Vector3 position = module.transform.TransformPoint(new Vector3(-0.30f, 0.1f, 0f));
+            Vector3 direction = module.transform.TransformDirection(new Vector3(-0.7f, 1f, 0f));
+            SpawnConfetti(position, direction, 100, 1.5f);
+            break;
+        }
+    }
+
+    private void SpawnConfetti(Vector3 position, Vector3 direction, short count, float maxSpeed)
+    {
+        if (confettiPrefab == null) return;
+
+        GameObject burst = Instantiate(confettiPrefab, position, Quaternion.LookRotation(direction.normalized));
+        burst.name = "BombConfetti";
+        activeConfetti.Add(burst);
+
+        foreach (ParticleSystem system in burst.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            ParticleSystem.MainModule main = system.main;
+            main.startSize3D = false;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.012f, 0.024f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(2.3f, 4.2f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.7f, maxSpeed);
+            main.startColor = ConfettiColors();
+
+            ParticleSystem.EmissionModule emission = system.emission;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, count) });
+            system.Play(false);
+        }
+    }
+
+    private static ParticleSystem.MinMaxGradient ConfettiColors()
+    {
+        Gradient rainbow = new Gradient();
+        rainbow.SetKeys(new[]
+        {
+            new GradientColorKey(new Color(1f, 0.2f, 0.2f), 0f),
+            new GradientColorKey(new Color(1f, 0.85f, 0.15f), 0.2f),
+            new GradientColorKey(new Color(0.25f, 1f, 0.3f), 0.4f),
+            new GradientColorKey(new Color(0.15f, 0.85f, 1f), 0.6f),
+            new GradientColorKey(new Color(0.45f, 0.4f, 1f), 0.8f),
+            new GradientColorKey(new Color(1f, 0.25f, 0.8f), 1f)
+        }, new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 1f) });
+
+        ParticleSystem.MinMaxGradient colors = new ParticleSystem.MinMaxGradient(rainbow);
+        colors.mode = ParticleSystemGradientMode.RandomColor;
+        return colors;
+    }
+
+    private void ClearConfetti()
+    {
+        foreach (GameObject burst in activeConfetti)
+            if (burst != null) Destroy(burst);
+        activeConfetti.Clear();
     }
 
     // ------------------------------------------------------------------ Bolita
@@ -537,6 +603,8 @@ public class BombUI : MonoBehaviour
         gState = InteractableState.Normal;
         UpdateBodyHighlight();
         StopAllCoroutines();
+        victoryRoutine = null;
+        ClearConfetti();
         CleanupVictoryScreen();
         if (bomb != null)
         {
@@ -655,8 +723,23 @@ public class BombUI : MonoBehaviour
     {
         if (victoryScreenGo != null) yield break;
 
-        // Stop any existing coroutines that might interfere
-        StopAllCoroutines();
+        // Give the world-space confetti time to shine before the dark splash
+        // covers it. The final button is the only route to Defused.
+        if (bomb != null && confettiPrefab != null)
+        {
+            Transform source = bomb.transform;
+            SpawnConfetti(source.TransformPoint(new Vector3(-0.20f, 0.34f, 0f)),
+                source.TransformDirection(new Vector3(-0.35f, 1f, 0.1f)), 140, 1.9f);
+            float stagger = Mathf.Min(0.35f, victoryConfettiSeconds);
+            yield return new WaitForSecondsRealtime(stagger);
+            if (bomb == null || bomb.State != BombState.Defused) yield break;
+
+            SpawnConfetti(source.TransformPoint(new Vector3(0.20f, 0.34f, 0f)),
+                source.TransformDirection(new Vector3(0.35f, 1f, 0.1f)), 140, 1.9f);
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, victoryConfettiSeconds - stagger));
+        }
+
+        if (bomb == null || bomb.State != BombState.Defused) yield break;
 
         // Create full-screen victory splash
         victoryScreenGo = new GameObject("VictorySplash");

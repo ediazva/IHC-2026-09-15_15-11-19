@@ -16,7 +16,14 @@ public class HarassmentButton : MonoBehaviour
 
     private PokeInteractable pokeInteractable;
     private Material material;
+    private Color baseColor;
+    private Color legacyColor;
     private Color baseEmission;
+    private bool colorHidden;
+    private bool cueHighlighted;
+    private Coroutine cueRoutine;
+
+    private static readonly Color ObscuredColor = new Color(0.28f, 0.28f, 0.28f);
 
     private void Awake()
     {
@@ -27,7 +34,9 @@ public class HarassmentButton : MonoBehaviour
         {
             material = new Material(buttonRenderer.sharedMaterial);
             buttonRenderer.sharedMaterial = material;
-            baseEmission = Color.black;
+            if (material.HasProperty("_BaseColor")) baseColor = material.GetColor("_BaseColor");
+            if (material.HasProperty("_Color")) legacyColor = material.GetColor("_Color");
+            if (material.HasProperty("_EmissionColor")) baseEmission = material.GetColor("_EmissionColor");
         }
 
         pokeInteractable = Isdk.Poke(gameObject, Vector3.forward);
@@ -61,26 +70,66 @@ public class HarassmentButton : MonoBehaviour
         {
             t += Time.deltaTime;
             float p = Mathf.Sin((t / duration) * Mathf.PI);
-            material.SetColor("_EmissionColor", buttonColor * p * 2f);
+            material.SetColor("_EmissionColor", colorHidden ? Color.white * p * 0.3f : buttonColor * p * 2f);
             yield return null;
         }
 
-        material.SetColor("_EmissionColor", baseEmission);
+        material.SetColor("_EmissionColor", colorHidden ? Color.black : baseEmission);
     }
 
-    public void SetHighlight(bool highlight)
+    public void SetCueHighlight(bool highlighted)
     {
-        if (material == null) return;
+        if (material == null || cueHighlighted == highlighted) return;
+        if (highlighted && colorHidden) return;
 
-        if (highlight)
+        cueHighlighted = highlighted;
+        if (cueRoutine != null)
+        {
+            StopCoroutine(cueRoutine);
+            cueRoutine = null;
+        }
+
+        if (highlighted)
         {
             material.EnableKeyword("_EMISSION");
-            material.SetColor("_EmissionColor", Color.white * 5f);
+            cueRoutine = StartCoroutine(CueFlash());
         }
         else
         {
-            material.SetColor("_EmissionColor", baseEmission);
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", colorHidden ? ObscuredColor : baseColor);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", colorHidden ? ObscuredColor : legacyColor);
+            if (material.HasProperty("_EmissionColor")) material.SetColor("_EmissionColor", colorHidden ? Color.black : baseEmission);
         }
+    }
+
+    private System.Collections.IEnumerator CueFlash()
+    {
+        while (cueHighlighted)
+        {
+            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 9f);
+            Color litColor = Color.Lerp(buttonColor, Color.white, pulse * 0.35f);
+            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", litColor);
+            if (material.HasProperty("_Color")) material.SetColor("_Color", litColor);
+            if (material.HasProperty("_EmissionColor"))
+                material.SetColor("_EmissionColor", buttonColor * Mathf.Lerp(1.5f, 5f, pulse));
+            yield return null;
+        }
+    }
+
+    public void SetColorHidden(bool hidden)
+    {
+        if (material == null || colorHidden == hidden) return;
+
+        StopAllCoroutines();
+        cueRoutine = null;
+        cueHighlighted = false;
+        colorHidden = hidden;
+        // Use identical neutral materials on all three buttons. This also hides
+        // their colours on Quest if camera post-processing is unavailable.
+        if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", hidden ? ObscuredColor : baseColor);
+        if (material.HasProperty("_Color")) material.SetColor("_Color", hidden ? ObscuredColor : legacyColor);
+        if (material.HasProperty("_EmissionColor"))
+            material.SetColor("_EmissionColor", hidden ? Color.black : baseEmission);
     }
 
     private void OnDestroy()

@@ -14,7 +14,7 @@ public class HarassmentEvent : MonoBehaviour
     [Min(1f)] public float maxInterval = 75f;
     [Min(1f)] public float minTimeToPress = 6f;
     [Min(1f)] public float maxTimeToPress = 22f;
-    [Min(0f)] public float targetCueSeconds = 1.1f;
+    [Min(0f)] public float targetCueSeconds = 3f;
     [Range(0f, 1f)] public float chainProbability = 0f;
     [Min(0)] public int maxConsecutiveChains = 0;
 
@@ -24,8 +24,8 @@ public class HarassmentEvent : MonoBehaviour
     public float timeoutPenaltySeconds = 15f;
 
     [Header("Vision effect")]
-    [Range(0f, 1f)] public float obscuredVignette = 0f;
-    [Range(-5f, 0f)] public float obscuredExposure = -1.5f;
+    [Range(0f, 1f)] public float obscuredVignette = 0.2f;
+    [Range(-5f, 0f)] public float obscuredExposure = -2f;
 
     [Header("References (assigned by the room builder)")]
     public BombManager bomb;
@@ -178,8 +178,8 @@ public class HarassmentEvent : MonoBehaviour
         eventScheduled = false;
         remainingToRespond = Random.Range(Mathf.Max(1f, minTimeToPress), Mathf.Max(minTimeToPress, maxTimeToPress));
 
-        // Briefly show both the cube colour and the matching button location
-        // before the solid blackout so the player can memorize the target.
+        // Briefly pair the bomb's colour with the matching wall button. Both
+        // cues disappear before the room is obscured, so its location must be remembered.
         if (bombUI != null) bombUI.SetEventGlow(targetButton.buttonColor, 2.2f);
         else if (bombBodyRenderer != null)
         {
@@ -187,14 +187,14 @@ public class HarassmentEvent : MonoBehaviour
             bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", targetButton.buttonColor * 2.2f);
         }
 
-        targetButton.SetHighlight(true);
+        targetButton.SetCueHighlight(true);
         SFX.Tone(440f, 0.32f, 0.45f);
         if (visibilityController != null)
         {
             visibilityController.obscuredVignette = obscuredVignette;
             visibilityController.obscuredPostExposure = obscuredExposure;
-            obscureRoutine = StartCoroutine(ObscureAfterTargetCue());
         }
+        obscureRoutine = StartCoroutine(ObscureAfterTargetCue());
         Debug.Log($"[HarassmentEvent] Apagón; objetivo={targetButton.buttonName}, tiempo={remainingToRespond:F1}s");
     }
 
@@ -202,11 +202,17 @@ public class HarassmentEvent : MonoBehaviour
     {
         yield return new WaitForSeconds(targetCueSeconds);
         obscureRoutine = null;
+        if (targetButton != null) targetButton.SetCueHighlight(false);
         if (bombUI != null) bombUI.ClearEventGlow();
         else if (bombBodyRenderer != null)
             bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", Color.black);
-        if (eventActive && bomb != null && bomb.State == BombState.Running && visibilityController != null)
-            visibilityController.SetObscured(true);
+        if (eventActive && bomb != null && bomb.State == BombState.Running)
+        {
+            if (buttons != null)
+                foreach (HarassmentButton button in buttons)
+                    if (button != null) button.SetColorHidden(true);
+            if (visibilityController != null) visibilityController.SetObscured(true);
+        }
     }
 
     private void OnButtonPressed(HarassmentButton pressedButton)
@@ -241,7 +247,7 @@ public class HarassmentEvent : MonoBehaviour
     {
         bool wasActive = eventActive;
         eventActive = false;
-        if (targetButton != null) targetButton.SetHighlight(false);
+        if (targetButton != null) targetButton.SetCueHighlight(false);
         targetButton = null;
         if (obscureRoutine != null)
         {
@@ -271,6 +277,9 @@ public class HarassmentEvent : MonoBehaviour
     private void RestoreEffects()
     {
         if (visibilityController != null) visibilityController.SetObscured(false);
+        if (buttons != null)
+            foreach (HarassmentButton button in buttons)
+                if (button != null) button.SetColorHidden(false);
         if (bombUI != null) bombUI.ClearEventGlow();
         else if (bombBodyRenderer != null)
             bombBodyRenderer.sharedMaterial.SetColor("_EmissionColor", Color.black);
@@ -295,7 +304,7 @@ public class HarassmentEvent : MonoBehaviour
             StopCoroutine(obscureRoutine);
             obscureRoutine = null;
         }
-        if (targetButton != null) targetButton.SetHighlight(false);
+        if (targetButton != null) targetButton.SetCueHighlight(false);
         eventActive = false;
         eventScheduled = false;
         firstEventScheduled = false;
